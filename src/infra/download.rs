@@ -121,7 +121,25 @@ pub fn download(
         }
         Err(error) => return Err(error).context("无法读取下载来源标记"),
     }
-    download_partial(url, &part, checksum, control, &mut progress)?;
+    if download_partial(url, &part, checksum, control, &mut progress, 8)?
+        == TransferOutcome::RangeUnsupported
+    {
+        control.check_cancelled()?;
+        // 前一个子进程已退出。服务器不支持 Range 时，残留分块无法续传，重新单路下载。
+        for path in [&part, &sidecar(&part, ".aria2")] {
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error).context("无法清理服务器不支持的分块下载"),
+            }
+        }
+        progress(DownloadProgress::default());
+        if download_partial(url, &part, checksum, control, &mut progress, 1)?
+            == TransferOutcome::RangeUnsupported
+        {
+            bail!("服务器拒绝了单连接下载，请更换下载地址");
+        }
+    }
     if let Some(expected) = checksum {
         let total = fs::metadata(&part)?.len();
         progress(DownloadProgress {
@@ -220,13 +238,20 @@ fn unpack_payload(path: &Path) -> Result<()> {
     verify_checksum(path, PAYLOAD_SHA256, &DownloadControl::default())
 }
 
+#[derive(PartialEq, Eq)]
+enum TransferOutcome {
+    Complete,
+    RangeUnsupported,
+}
+
 fn download_partial(
     url: &str,
     part: &Path,
     checksum: Option<&str>,
     control: &DownloadControl,
     progress: &mut impl FnMut(DownloadProgress),
-) -> Result<()> {
+    connections: u32,
+) -> Result<TransferOutcome> {
     let payload_dir = tempfile::Builder::new()
         .prefix("mipcm-aria2-")
         .rand_bytes(32)
@@ -262,8 +287,6 @@ fn download_partial(
             "--enable-rpc=true",
             "--rpc-listen-all=false",
             "--rpc-allow-origin-all=false",
-            "--split=8",
-            "--max-connection-per-server=8",
             "--min-split-size=1M",
             "--max-concurrent-downloads=1",
             "--file-allocation=none",
@@ -285,6 +308,8 @@ fn download_partial(
             "--show-console-readout=false",
             "--console-log-level=error",
         ])
+        .arg(format!("--split={connections}"))
+        .arg(format!("--max-connection-per-server={connections}"))
         .arg(format!("--rpc-listen-port={}", address.port()))
         .arg(format!("--rpc-secret={}", rpc.secret))
         .arg(format!("--stop-with-process={}", std::process::id()))
@@ -351,7 +376,10 @@ fn download_partial(
                 ],
             )?;
             match status["status"].as_str().context("下载器返回了无效状态")? {
-                "complete" => return Ok(()),
+                "complete" => return Ok(TransferOutcome::Complete),
+                "error" if status["errorCode"] == "8" => {
+                    return Ok(TransferOutcome::RangeUnsupported);
+                }
                 "error" => bail!(
                     "aria2 下载失败（{}）：{}",
                     status["errorCode"].as_str().unwrap_or("?"),
