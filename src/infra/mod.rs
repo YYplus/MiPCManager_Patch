@@ -6,6 +6,7 @@
 //! - [`registry`]：Windows 注册表读写（`#[cfg(windows)]`）
 
 pub mod bytes;
+pub mod download;
 pub mod pe;
 pub mod powershell;
 pub mod registry;

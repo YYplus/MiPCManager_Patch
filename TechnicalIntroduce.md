@@ -151,13 +151,16 @@ if (exception_id == CameraExceptionId.kLOCAL_CAMERA_DISABLED)
 
 ## 安装小米电脑管家
 
-安装入口仅在未检测到 `PcContinuity` 时可用（官方不允许两者同时安装）。工具优先扫描 Patcher 可执行文件同目录的 `*_XiaomiPCManager_*.exe`；找到一个时直接使用，找到多个时请用户选择。如未找到，则提示输入 HTTP(S) 网址或本地 `.exe` 路径。
+GUI 默认提供推荐版电脑管家的「一键下载安装」，手动安装展开后可输入 HTTP(S) 网址或选择本地 `.exe`。下载前及启动前均校验产品共存限制：电脑管家不能与小米互联 / PcContinuity / HyperConnect 同时安装。CLI 的 `install --recommended` 直接获取推荐版；不带安装来源参数时保留同目录安装包扫描，找到多个时请用户选择，如未找到则提供推荐下载、手动网址和本地路径三种选项。
 
 启动安装包前，工具会在安装包同目录临时准备 `msimg32.dll`，写入默认伪装机型，然后挂起启动安装器、注入代理并旁路系统版本与机型检查。安装器启动成功后，安装包目录中的临时文件会恢复为操作前的状态。
 
-**URL 下载**：调用 Windows PowerShell `Invoke-WebRequest`，URL 通过子进程环境变量传入（不拼接到 PowerShell 脚本中）。下载先写入 `.download.tmp` 临时文件，成功后再重命名，避免保留不完整安装包。
+**URL 下载**：`infra::download` 解压并校验内嵌 aria2，仅在下载期间启动隐藏窗口的子进程，结束后退出并移除下载器临时目录。最多八路连接；进度从本次子进程的 loopback JSON-RPC 读取，不以文件大小估算。会话使用随机令牌，不读取用户 aria2 配置。URL 与路径作为 JSON 数据传入，不拼接到 PowerShell 或 shell 命令中。
+
+下载缓存按 URL 隔离，位于 `%LOCALAPPDATA%\MiPCManager_Patch\downloads`。下载先写 `.part`，aria2 的 `.aria2` 控制文件与来源 `.download.meta` 支持续传，完成后保存为 `.exe`。跨进程文件锁防止重复下载同一目标，保存时不覆盖同名文件。推荐版电脑管家固定版本、地址与 SHA-256；通过校验的缓存可复用，校验失败不会启动。手动地址没有预置哈希，其完整同名文件保留并报错，可转为本地安装。取消下载不等于取消已经启动的安装器。
 
 **命令行选项**：
+- `--recommended`：下载并安装内置推荐版电脑管家
 - `--installer <exe>`：显式指定安装包路径
 - `--url <url>`：通过 HTTP(S) 下载安装包
 
@@ -206,7 +209,7 @@ if (exception_id == CameraExceptionId.kLOCAL_CAMERA_DISABLED)
 | 有线音频路由 | 在有线模式下按需创建 metric=1 的持久 Wi-Fi 本地子网路由，并在版本目录记录 `.mipcm_audio_wifi_route` | 只删除本工具有状态记录的路由和状态文件 |
 | 设备伪装 | 向小米电脑管家版本目录部署 `msimg32.dll`，并写入 `HKCU\Software\SmartSharePatch\SpoofDevice` | 恢复或删除代理 DLL，并删除注册表值 |
 | 超级小爱 | 安装时临时部署、随后恢复安装包目录中的 `userenv.dll`；安装后向实际版本目录部署该 DLL | 根据 `.orig.bak` 恢复原文件，或删除本工具部署的 DLL |
-| 安装包下载 | 把用户指定 URL 下载到 Patcher 目录的 `.download.tmp`，成功后再重命名为 `.exe`；不会覆盖已有目标 | 用户可自行删除已下载安装包 |
+| 安装包下载 | 以独立缓存和 `.part` / `.aria2` / `.download.meta` 管理下载，完成后保存为 `.exe`；推荐版校验固定 SHA-256 | 用户可取消并续传，或自行删除下载缓存 |
 | 产品卸载 | 经用户确认后运行产品自带卸载程序；相关入口还可删除已知服务、残留目录或 MiDrop Ext MSIX，并在需要时重启资源管理器 | 属于不可逆操作，执行前由界面要求确认 |
 
 除产品卸载外，补丁操作均以幂等和可还原为目标。对目标文件的持久写入使用同目录临时文件替换；若已有备份，程序保留首次备份，不覆盖原始副本。

@@ -29,6 +29,15 @@ export component AppWindow inherits Window {
     in-out property <length> log-viewport-y: 0px;
     in-out property <bool> downloading: false;
     in-out property <bool> xiaoai-busy: false;
+    in-out property <bool> manager-manual: false;
+    in-out property <bool> xiaoai-manual: false;
+    in-out property <string> recommended-version;
+    in-out property <float> manager-progress: 0;
+    in-out property <string> manager-progress-text;
+    in-out property <bool> manager-download-active: false;
+    in-out property <float> xiaoai-progress: 0;
+    in-out property <string> xiaoai-progress-text;
+    in-out property <bool> xiaoai-download-active: false;
     in-out property <bool> show-confirm: false;
     in-out property <string> confirm-desc;
     in-out property <string> url-input;
@@ -60,6 +69,9 @@ export component AppWindow inherits Window {
     callback apply-xiaoai();
     callback revert-xiaoai();
     callback download-and-install(string);
+    callback install-recommended();
+    callback cancel-download();
+    callback cancel-xiaoai-download();
     callback browse-installer();
     callback start-install(string);
     callback download-and-install-xiaoai(string);
@@ -444,47 +456,87 @@ export component AppWindow inherits Window {
                                 font-size: 16px;
                             }
 
+                            Text {
+                                text: root.tr("install.recommended") + " " + root.recommended-version;
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
-                                    text <=> root.url-input;
-                                    placeholder-text: root.tr("install.download.placeholder");
-                                }
-
-                                if root.downloading: Spinner {
-                                    indeterminate: true;
-                                }
                                 Button {
                                     height: 30px;
                                     width: 166px;
                                     primary: true;
-                                    text: root.tr("install.download.and.install");
-                                    enabled: !root.downloading && root.url-input != "";
-                                    clicked => { root.download-and-install(root.url-input); }
+                                    text: root.tr("install.one-click");
+                                    enabled: !root.downloading;
+                                    clicked => { root.install-recommended(); }
+                                }
+                                Button {
+                                    height: 30px;
+                                    text: root.manager-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                    enabled: !root.downloading;
+                                    clicked => { root.manager-manual = !root.manager-manual; }
+                                }
+                                if root.downloading: Spinner { indeterminate: true; }
+                            }
+
+                            if root.downloading: VerticalLayout {
+                                spacing: 6px;
+                                Rectangle {
+                                    height: 6px;
+                                    background: Palette.alternate-background;
+                                    Rectangle {
+                                        width: parent.width * root.manager-progress;
+                                        background: Palette.accent-background;
+                                    }
+                                }
+                                Text { text: root.manager-progress-text; }
+                                Button {
+                                    height: 30px;
+                                    text: root.tr("install.cancel-download");
+                                    enabled: root.manager-download-active;
+                                    clicked => { root.cancel-download(); }
                                 }
                             }
 
-                            HorizontalLayout {
+                            if root.manager-manual: VerticalLayout {
                                 spacing: 6px;
-                                LineEdit {
-                                    text <=> root.path-input;
-                                    placeholder-text: root.tr("install.file.placeholder");
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    LineEdit {
+                                        text <=> root.url-input;
+                                        enabled: !root.downloading;
+                                        placeholder-text: root.tr("install.download.placeholder");
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 166px;
+                                        primary: true;
+                                        text: root.tr("install.download.and.install");
+                                        enabled: !root.downloading && root.url-input != "";
+                                        clicked => { root.download-and-install(root.url-input); }
+                                    }
                                 }
-
-                                Button {
-                                    height: 30px;
-                                    width: 80px;
-                                    text: root.tr("btn.select");
-                                    clicked => { root.browse-installer(); }
-                                }
-
-                                Button {
-                                    height: 30px;
-                                    width: 80px;
-                                    primary: true;
-                                    text: root.tr("btn.start-install");
-                                    enabled: root.path-input != "";
-                                    clicked => { root.start-install(root.path-input); }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    LineEdit {
+                                        text <=> root.path-input;
+                                        enabled: !root.downloading;
+                                        placeholder-text: root.tr("install.file.placeholder");
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        text: root.tr("btn.select");
+                                        enabled: !root.downloading;
+                                        clicked => { root.browse-installer(); }
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        primary: true;
+                                        text: root.tr("btn.start-install");
+                                        enabled: !root.downloading && root.path-input != "";
+                                        clicked => { root.start-install(root.path-input); }
+                                    }
                                 }
                             }
                         }
@@ -504,49 +556,74 @@ export component AppWindow inherits Window {
                             Text {
                                 text: root.tr("install.xiaoai.note");
                             }
-
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
-                                    text <=> root.xiaoai-url-input;
-                                    placeholder-text: root.tr("install.download.placeholder");
-                                }
-
-                                if root.xiaoai-busy: Spinner {
-                                    indeterminate: true;
-                                }
                                 Button {
                                     height: 30px;
-                                    width: 166px;
-                                    primary: true;
-                                    text: root.tr("install.download.and.install");
-                                    enabled: !root.xiaoai-busy && root.xiaoai-url-input != "";
-                                    clicked => { root.download-and-install-xiaoai(root.xiaoai-url-input); }
+                                    text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                    enabled: !root.xiaoai-busy;
+                                    clicked => { root.xiaoai-manual = !root.xiaoai-manual; }
+                                }
+                                if root.xiaoai-busy: Spinner { indeterminate: true; }
+                            }
+                            if root.xiaoai-busy: VerticalLayout {
+                                spacing: 6px;
+                                Rectangle {
+                                    height: 6px;
+                                    background: Palette.alternate-background;
+                                    Rectangle {
+                                        width: parent.width * root.xiaoai-progress;
+                                        background: Palette.accent-background;
+                                    }
+                                }
+                                Text { text: root.xiaoai-progress-text; }
+                                Button {
+                                    height: 30px;
+                                    text: root.tr("install.cancel-download");
+                                    enabled: root.xiaoai-download-active;
+                                    clicked => { root.cancel-xiaoai-download(); }
                                 }
                             }
-
-                            HorizontalLayout {
+                            if root.xiaoai-manual: VerticalLayout {
                                 spacing: 6px;
-                                LineEdit {
-                                    text <=> root.xiaoai-path-input;
-                                    placeholder-text: root.tr("install.file.placeholder");
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    LineEdit {
+                                        text <=> root.xiaoai-url-input;
+                                        enabled: !root.xiaoai-busy;
+                                        placeholder-text: root.tr("install.download.placeholder");
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 166px;
+                                        primary: true;
+                                        text: root.tr("install.download.and.install");
+                                        enabled: !root.xiaoai-busy && root.xiaoai-url-input != "";
+                                        clicked => { root.download-and-install-xiaoai(root.xiaoai-url-input); }
+                                    }
                                 }
-
-                                Button {
-                                    height: 30px;
-                                    width: 80px;
-                                    text: root.tr("btn.select");
-                                    enabled: !root.xiaoai-busy;
-                                    clicked => { root.browse-xiaoai-installer(); }
-                                }
-
-                                Button {
-                                    height: 30px;
-                                    width: 80px;
-                                    primary: true;
-                                    text: root.tr("btn.start-install");
-                                    enabled: !root.xiaoai-busy && root.xiaoai-path-input != "";
-                                    clicked => { root.start-xiaoai-install(root.xiaoai-path-input); }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    LineEdit {
+                                        text <=> root.xiaoai-path-input;
+                                        enabled: !root.xiaoai-busy;
+                                        placeholder-text: root.tr("install.file.placeholder");
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        text: root.tr("btn.select");
+                                        enabled: !root.xiaoai-busy;
+                                        clicked => { root.browse-xiaoai-installer(); }
+                                    }
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        primary: true;
+                                        text: root.tr("btn.start-install");
+                                        enabled: !root.xiaoai-busy && root.xiaoai-path-input != "";
+                                        clicked => { root.start-xiaoai-install(root.xiaoai-path-input); }
+                                    }
                                 }
                             }
                         }

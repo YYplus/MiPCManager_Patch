@@ -102,6 +102,24 @@ jobs:
             Write-Host "Release asset: $dest"
           }
 
+          # aria2 的源码和许可随产物提供；无需将源码内嵌到 GUI/CLI 中。
+          $sourceDir = Join-Path $env:RUNNER_TEMP 'aria2-sources'
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $ProgressPreference = 'SilentlyContinue'
+          $sources = Get-Content -Raw -LiteralPath 'assets/aria2/sources.json' | ConvertFrom-Json
+          foreach ($source in $sources) {
+            $dest = Join-Path $sourceDir $source.name
+            Invoke-WebRequest -Uri $source.url -OutFile $dest
+            if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash -ne $source.sha256) {
+              throw "aria2 源码 SHA-256 不匹配：$($source.name)"
+            }
+          }
+          foreach ($notice in @('NOTICE.md', 'COPYING', 'LICENSE.OpenSSL', 'AUTHORS', 'README.mingw', 'sources.json')) {
+            Copy-Item -LiteralPath (Join-Path 'assets/aria2' $notice) -Destination $sourceDir
+          }
+          Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $sourceDir 'COPYING.GPLv3')
+          Compress-Archive -Path (Join-Path $sourceDir '*') -DestinationPath (Join-Path $outDir 'aria2-1.37.0-sources.zip') -Force
+
           "dir=$outDir" >> $env:GITHUB_OUTPUT
 
       - name: Generate changelog
@@ -128,6 +146,7 @@ jobs:
           $lines.Add('')
           $lines.Add("- ``MiPCM_CLI_v$env:RELEASE_VERSION.exe``")
           $lines.Add("- ``MiPCM_GUI_v$env:RELEASE_VERSION.exe``")
+          $lines.Add('- `aria2-1.37.0-sources.zip` — 内嵌 aria2 的对应源码与许可（运行工具不需要下载）')
           $lines.Add('')
           $lines.Add('### 更新日志')
           $lines.Add('')
@@ -160,7 +179,8 @@ jobs:
         run: |
           $assets = @(
             (Join-Path $env:ASSET_DIR "MiPCM_CLI_v$env:RELEASE_VERSION.exe"),
-            (Join-Path $env:ASSET_DIR "MiPCM_GUI_v$env:RELEASE_VERSION.exe")
+            (Join-Path $env:ASSET_DIR "MiPCM_GUI_v$env:RELEASE_VERSION.exe"),
+            (Join-Path $env:ASSET_DIR 'aria2-1.37.0-sources.zip')
           )
           foreach ($asset in $assets) {
             if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {

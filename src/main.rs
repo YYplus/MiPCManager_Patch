@@ -62,6 +62,9 @@ enum Command {
         /// 从 HTTP(S) 地址下载安装包
         #[arg(long, value_name = "URL", conflicts_with = "installer")]
         url: Option<String>,
+        /// 下载并安装内置推荐版小米电脑管家
+        #[arg(long, conflicts_with_all = ["installer", "url"])]
+        recommended: bool,
     },
     /// 安装或维护超级小爱（userenv.dll）
     Xiaoai {
@@ -337,7 +340,11 @@ fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
                 Ok(())
             }
         },
-        Command::Install { installer, url } => install_pc_manager(installer, url, lang),
+        Command::Install {
+            installer,
+            url,
+            recommended,
+        } => install_pc_manager(installer, url, recommended, lang),
         Command::Xiaoai { action } => match action {
             XiaoaiAction::Install { installer, url } => install_xiaoai(installer, url, lang),
             XiaoaiAction::Apply { dir, no_kill } => {
@@ -381,44 +388,81 @@ fn print_log(lines: Vec<String>) {
 fn install_pc_manager(
     explicit: Option<PathBuf>,
     url: Option<String>,
+    recommended: bool,
     lang: i18n::Lang,
 ) -> Result<()> {
     let patcher_dir = pc_manager_installer::patcher_dir()?;
-    let Some(installer) = choose_manager_installer(explicit, url.as_deref(), &patcher_dir, lang)?
-    else {
+    let source = if recommended {
+        Some(InstallerSource::Recommended)
+    } else {
+        choose_manager_installer(explicit, url, &patcher_dir, lang)?
+    };
+    let Some(source) = source else {
         println!("{}", i18n::tr("cli.cancelled.install", lang));
         return Ok(());
     };
-    print_log(ops::install_from_path(&installer)?);
+    let control = ops::DownloadControl::default();
+    let mut progress = console_download_progress(lang);
+    let result = match source {
+        InstallerSource::Local(installer) => ops::install_from_path(&installer),
+        InstallerSource::Url(url) => {
+            ops::download_and_install_pc_manager(Some(&url), &control, &mut progress)
+        }
+        InstallerSource::Recommended => {
+            ops::download_and_install_pc_manager(None, &control, &mut progress)
+        }
+    };
+    eprintln!();
+    print_log(result?);
     Ok(())
 }
 
-fn install_xiaoai(explicit: Option<PathBuf>, url: Option<String>, _lang: i18n::Lang) -> Result<()> {
-    let log = match (explicit, url) {
-        (Some(installer), None) => ops::install_xiaoai_from_path(&installer)?,
-        (None, Some(url)) => ops::download_and_install_xiaoai(&url)?,
-        (None, None) => ops::install_local_xiaoai()?,
+fn install_xiaoai(explicit: Option<PathBuf>, url: Option<String>, lang: i18n::Lang) -> Result<()> {
+    let control = ops::DownloadControl::default();
+    let mut progress = console_download_progress(lang);
+    let result = match (explicit, url) {
+        (Some(installer), None) => ops::install_xiaoai_from_path(&installer),
+        (None, Some(url)) => ops::download_and_install_xiaoai(&url, &control, &mut progress),
+        (None, None) => ops::install_local_xiaoai(),
         (Some(_), Some(_)) => unreachable!("clap rejects conflicting installer sources"),
     };
-    print_log(log);
+    eprintln!();
+    print_log(result?);
     Ok(())
+}
+
+fn console_download_progress(lang: i18n::Lang) -> impl FnMut(ops::DownloadProgress) {
+    use std::io::{IsTerminal, Write};
+    let terminal = std::io::stderr().is_terminal();
+    let mut previous_phase = None;
+    move |progress| {
+        if terminal {
+            eprint!("\r{:<100}", ops::download_progress_text(progress, lang));
+            let _ = std::io::stderr().flush();
+        } else if previous_phase != Some(progress.phase) {
+            eprintln!("{}", ops::download_progress_text(progress, lang));
+        }
+        previous_phase = Some(progress.phase);
+    }
+}
+
+enum InstallerSource {
+    Recommended,
+    Url(String),
+    Local(PathBuf),
 }
 
 fn choose_manager_installer(
     explicit: Option<PathBuf>,
-    url: Option<&str>,
+    url: Option<String>,
     patcher_dir: &Path,
     lang: i18n::Lang,
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<InstallerSource>> {
     if let Some(path) = explicit {
-        return Ok(Some(path));
+        return Ok(Some(InstallerSource::Local(path)));
     }
     if let Some(url) = url {
-        println!(
-            "{}",
-            i18n::tr("cli.downloading", lang).replace("{path}", &patcher_dir.display().to_string())
-        );
-        return pc_manager_installer::download_installer(url, patcher_dir).map(Some);
+        return Ok(Some(InstallerSource::Url(url)));
     }
 
     let candidates = pc_manager_installer::find_local_installers(patcher_dir)?;
@@ -431,10 +475,11 @@ fn choose_manager_installer(
                     .replace("{kind}", kind.label_for(lang))
                     .replace("{path}", &only.display().to_string())
             );
-            Ok(Some(only.clone()))
+            Ok(Some(InstallerSource::Local(only.clone())))
         }
-        [] => prompt_installer_source(patcher_dir, lang),
-        _ => prompt_installer_candidate(&candidates, lang),
+        [] => prompt_installer_source(lang),
+        _ => prompt_installer_candidate(&candidates, lang)
+            .map(|selected| selected.map(InstallerSource::Local)),
     }
 }
 
@@ -443,6 +488,7 @@ fn choose_manager_installer(
 /// 菜单动作：定义每个菜单项对应的业务逻辑。
 /// 新增菜单项时在此添加变体并在 [`INSTALLER_SOURCE_MENU`] 中注册。
 enum InstallerSourceAction {
+    Recommended,
     DownloadUrl,
     SpecifyPath,
 }
@@ -458,11 +504,16 @@ struct MenuEntry {
 const INSTALLER_SOURCE_MENU: &[MenuEntry] = &[
     MenuEntry {
         key: "1",
+        description: "cli.menu.recommended",
+        action: InstallerSourceAction::Recommended,
+    },
+    MenuEntry {
+        key: "2",
         description: "cli.menu.download_url",
         action: InstallerSourceAction::DownloadUrl,
     },
     MenuEntry {
-        key: "2",
+        key: "3",
         description: "cli.menu.local_file",
         action: InstallerSourceAction::SpecifyPath,
     },
@@ -492,7 +543,7 @@ fn prompt_installer_candidate(candidates: &[PathBuf], lang: i18n::Lang) -> Resul
     Ok(Some(candidates[index - 1].clone()))
 }
 
-fn prompt_installer_source(patcher_dir: &Path, lang: i18n::Lang) -> Result<Option<PathBuf>> {
+fn prompt_installer_source(lang: i18n::Lang) -> Result<Option<InstallerSource>> {
     println!("{}", i18n::tr("cli.no.installer.found", lang));
     for entry in INSTALLER_SOURCE_MENU {
         println!("  {}) {}", entry.key, i18n::tr(entry.description, lang));
@@ -504,17 +555,13 @@ fn prompt_installer_source(patcher_dir: &Path, lang: i18n::Lang) -> Result<Optio
         .find(|e| e.key == choice)
         .map(|e| &e.action);
     match action {
+        Some(InstallerSourceAction::Recommended) => Ok(Some(InstallerSource::Recommended)),
         Some(InstallerSourceAction::DownloadUrl) => {
             let url = prompt(i18n::tr("cli.prompt.url", lang))?;
             if url.is_empty() {
                 return Ok(None);
             }
-            println!(
-                "{}",
-                i18n::tr("cli.downloading", lang)
-                    .replace("{path}", &patcher_dir.display().to_string())
-            );
-            pc_manager_installer::download_installer(&url, patcher_dir).map(Some)
+            Ok(Some(InstallerSource::Url(url)))
         }
         Some(InstallerSourceAction::SpecifyPath) => {
             let input = prompt(i18n::tr("cli.prompt.path", lang))?;
@@ -522,7 +569,7 @@ fn prompt_installer_source(patcher_dir: &Path, lang: i18n::Lang) -> Result<Optio
             if path.is_empty() {
                 Ok(None)
             } else {
-                Ok(Some(PathBuf::from(path)))
+                Ok(Some(InstallerSource::Local(PathBuf::from(path))))
             }
         }
         None if choice == "0" || choice.is_empty() => Ok(None),
@@ -546,6 +593,27 @@ mod install_routing_tests {
     #[test]
     fn install_cli_accepts_exactly_one_package_source() {
         assert!(Cli::try_parse_from(["MiPCM_CLI", "install"]).is_ok());
+        assert!(Cli::try_parse_from(["MiPCM_CLI", "install", "--recommended"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "MiPCM_CLI",
+                "install",
+                "--recommended",
+                "--installer",
+                "local.exe"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "MiPCM_CLI",
+                "install",
+                "--recommended",
+                "--url",
+                "https://example.com/a.exe"
+            ])
+            .is_err()
+        );
         assert!(
             Cli::try_parse_from(["MiPCM_CLI", "install", "--installer", "XiaomiPCManager.exe"])
                 .is_ok()
