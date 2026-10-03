@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 const PAYLOAD: &[u8] = include_bytes!("../../assets/aria2/aria2c.exe.gz");
 const PAYLOAD_SHA256: &str = "be2099c214f63a3cb4954b09a0becd6e2e34660b886d4c898d260febfe9d70c2";
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
+const CHECKSUM_MISMATCH: &str = "SHA-256 不匹配；文件可能损坏或官方安装包已更新，不会运行该安装包";
 
 #[derive(Clone, Default)]
 pub struct DownloadControl(Arc<AtomicBool>);
@@ -205,7 +206,7 @@ pub fn verify_open_file(file: &mut File, expected: &str, control: &DownloadContr
         hash.update(&block[..count]);
     }
     if !format!("{:x}", hash.finalize()).eq_ignore_ascii_case(expected) {
-        bail!("SHA-256 不匹配；文件可能损坏或官方安装包已更新，不会运行该安装包");
+        bail!(CHECKSUM_MISMATCH);
     }
     Ok(())
 }
@@ -323,6 +324,14 @@ fn download_partial(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
+    #[cfg(test)]
+    command
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .env_remove("http_proxy")
+        .env_remove("https_proxy")
+        .env_remove("all_proxy")
+        .env_remove("ftp_proxy");
     let mut child = ChildGuard(command.spawn().context("无法启动内嵌 aria2 下载器")?);
     let start = Instant::now();
     loop {
@@ -382,6 +391,7 @@ fn download_partial(
                 "error" if status["errorCode"] == "8" && connections > 1 => {
                     return Ok(TransferOutcome::RangeUnsupported);
                 }
+                "error" if status["errorCode"] == "32" => bail!(CHECKSUM_MISMATCH),
                 "error" => bail!(
                     "aria2 下载失败（{}）：{}",
                     status["errorCode"].as_str().unwrap_or("?"),
@@ -474,16 +484,19 @@ impl RpcClient {
         let body = serde_json::to_vec(
             &json!({"jsonrpc": "2.0", "id": "mipcm", "method": method, "params": params}),
         )?;
-        match self.request(&body) {
-            Err(error)
-                if method == "aria2.tellStatus"
-                    && error.downcast_ref::<std::io::Error>().is_some() =>
-            {
-                // 只重试只读进度查询；addUri 等修改操作不能重发，避免创建重复任务。
-                thread::sleep(Duration::from_millis(50));
-                self.request(&body).context("重新查询下载进度失败")
+        let retry_until = Instant::now() + Duration::from_secs(2);
+        loop {
+            match self.request(&body) {
+                Err(error)
+                    if method == "aria2.tellStatus"
+                        && error.downcast_ref::<std::io::Error>().is_some()
+                        && Instant::now() < retry_until =>
+                {
+                    // 只重试只读进度查询；addUri 等修改操作不能重发，避免创建重复任务。
+                    thread::sleep(Duration::from_millis(100));
+                }
+                result => return result,
             }
-            result => result,
         }
     }
 
@@ -736,7 +749,10 @@ mod tests {
                             let data = worker_data.clone();
                             let ranges = worker_ranges.clone();
                             handlers.push(thread::spawn(move || {
-                                let _ = serve(stream, &data, &ranges, ranged, throttled);
+                                if let Err(error) = serve(stream, &data, &ranges, ranged, throttled)
+                                {
+                                    eprintln!("HTTP fixture request failed: {error:#}");
+                                }
                             }));
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {

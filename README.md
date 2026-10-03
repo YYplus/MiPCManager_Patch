@@ -24,8 +24,8 @@
 
 从 [Releases](../../releases) 页面下载最新版本：
 
-- `MiPCM_GUI_v*.*.*.exe` — 图形界面（推荐）
-- `MiPCM_CLI_v*.*.*.exe` — 命令行工具
+- `MiPCM_Patch_GUI_v*.*.*.exe` — 图形界面（推荐）
+- `MiPCM_Patch_CLI_v*.*.*.exe` — 命令行工具
 
 ## 快速开始
 
