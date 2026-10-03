@@ -500,7 +500,19 @@ impl RpcClient {
 
     fn request(&self, body: &[u8]) -> Result<Value> {
         let timeout = Duration::from_secs(2);
-        let mut stream = TcpStream::connect_timeout(&self.address, timeout)?;
+        let retry_until = Instant::now() + timeout;
+        let mut stream = loop {
+            match TcpStream::connect_timeout(&self.address, timeout) {
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ConnectionRefused
+                        && Instant::now() < retry_until =>
+                {
+                    // 尚未发送请求，连接建立失败可以重试，不会重复创建下载任务。
+                    thread::sleep(Duration::from_millis(100));
+                }
+                result => break result?,
+            }
+        };
         stream.set_nodelay(true)?;
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
