@@ -134,7 +134,9 @@ pub fn download(
             }
         }
         progress(DownloadProgress::default());
-        if download_partial(url, &part, checksum, control, &mut progress, 1)?
+        // no-Range 回退不向 aria2 提供完整性元数据，避免它据此构造整文件 Range；
+        // SHA-256 仍在传输完成后由本进程强制校验，校验通过前绝不会晋升为最终 .exe。
+        if download_partial(url, &part, None, control, &mut progress, 1)?
             == TransferOutcome::RangeUnsupported
         {
             bail!("服务器拒绝了单连接下载，请更换下载地址");
@@ -703,10 +705,8 @@ mod tests {
             |_| {},
         );
         let error = result.unwrap_err();
-        assert!(
-            format!("{error:#}").contains("aria2 下载失败（32）"),
-            "{error:#}"
-        );
+        let message = format!("{error:#}");
+        assert!(message.contains("SHA-256 不匹配"), "{message}");
         assert!(sidecar(&target, ".part").is_file());
         assert!(!target.exists());
     }
