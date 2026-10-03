@@ -136,11 +136,7 @@ pub fn download(
         progress(DownloadProgress::default());
         // no-Range 回退不向 aria2 提供完整性元数据，避免它据此构造整文件 Range；
         // SHA-256 仍在传输完成后由本进程强制校验，校验通过前绝不会晋升为最终 .exe。
-        if download_partial(url, &part, None, control, &mut progress, 1)?
-            == TransferOutcome::RangeUnsupported
-        {
-            bail!("服务器拒绝了单连接下载，请更换下载地址");
-        }
+        download_partial(url, &part, None, control, &mut progress, 1)?;
     }
     if let Some(expected) = checksum {
         let total = fs::metadata(&part)?.len();
@@ -383,7 +379,7 @@ fn download_partial(
             )?;
             match status["status"].as_str().context("下载器返回了无效状态")? {
                 "complete" => return Ok(TransferOutcome::Complete),
-                "error" if status["errorCode"] == "8" => {
+                "error" if status["errorCode"] == "8" && connections > 1 => {
                     return Ok(TransferOutcome::RangeUnsupported);
                 }
                 "error" => bail!(

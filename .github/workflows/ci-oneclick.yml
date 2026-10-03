@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo check lib
@@ -21,7 +23,7 @@ jobs:
       - name: cargo check GUI
         run: cargo check --bin MiPCM_GUI
       - name: cargo test
-        run: cargo test
+        run: cargo test -- --nocapture
       - name: cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: cargo release
@@ -31,7 +33,11 @@ jobs:
         run: |
           $outDir = Join-Path $env:GITHUB_WORKSPACE 'verified-artifacts'
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          Copy-Item -LiteralPath 'target/release/MiPCM_GUI.exe', 'target/release/MiPCM_CLI.exe' -Destination $outDir
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+            Where-Object name -eq 'mipcmanager_patch' | Select-Object -ExpandProperty version
+          foreach ($frontend in @('GUI', 'CLI')) {
+            Copy-Item -LiteralPath "target/release/MiPCM_$frontend.exe" -Destination (Join-Path $outDir "MiPCM_Patch_$($frontend)_v$version.exe")
+          }
           # aria2 的源码和许可随产物提供；无需将源码内嵌到 GUI/CLI 中。
           $sourceDir = Join-Path $env:RUNNER_TEMP 'aria2-sources'
           New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null

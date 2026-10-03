@@ -88,8 +88,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
           $assets = @(
-            @{ Source = "target\release\MiPCM_CLI.exe"; Name = "MiPCM_CLI_v$env:VERSION.exe" },
-            @{ Source = "target\release\MiPCM_GUI.exe"; Name = "MiPCM_GUI_v$env:VERSION.exe" }
+            @{ Source = "target\release\MiPCM_CLI.exe"; Name = "MiPCM_Patch_CLI_v$env:VERSION.exe" },
+            @{ Source = "target\release\MiPCM_GUI.exe"; Name = "MiPCM_Patch_GUI_v$env:VERSION.exe" }
           )
 
           foreach ($asset in $assets) {
@@ -144,8 +144,8 @@ jobs:
           $lines.Add('')
           $lines.Add('### 产物')
           $lines.Add('')
-          $lines.Add("- ``MiPCM_CLI_v$env:RELEASE_VERSION.exe``")
-          $lines.Add("- ``MiPCM_GUI_v$env:RELEASE_VERSION.exe``")
+          $lines.Add("- ``MiPCM_Patch_CLI_v$env:RELEASE_VERSION.exe``")
+          $lines.Add("- ``MiPCM_Patch_GUI_v$env:RELEASE_VERSION.exe``")
           $lines.Add('- `aria2-1.37.0-sources.zip` — 内嵌 aria2 的对应源码与许可（运行工具不需要下载）')
           $lines.Add('')
           $lines.Add('### 更新日志')
@@ -178,8 +178,8 @@ jobs:
           NOTES_PATH: ${{ steps.changelog.outputs.path }}
         run: |
           $assets = @(
-            (Join-Path $env:ASSET_DIR "MiPCM_CLI_v$env:RELEASE_VERSION.exe"),
-            (Join-Path $env:ASSET_DIR "MiPCM_GUI_v$env:RELEASE_VERSION.exe"),
+            (Join-Path $env:ASSET_DIR "MiPCM_Patch_CLI_v$env:RELEASE_VERSION.exe"),
+            (Join-Path $env:ASSET_DIR "MiPCM_Patch_GUI_v$env:RELEASE_VERSION.exe"),
             (Join-Path $env:ASSET_DIR 'aria2-1.37.0-sources.zip')
           )
           foreach ($asset in $assets) {

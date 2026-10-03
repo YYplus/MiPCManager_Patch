@@ -8,8 +8,8 @@
 
 | 产物 | 入口 | 说明 |
 |---|---|---|
-| `MiPCM_GUI_v*.*.*.exe` | `src/ui/gui/app.rs` | Slint 图形界面，支持一键下载安装或展开手动来源 |
-| `MiPCM_CLI_v*.*.*.exe` | `src/main.rs` | clap 命令行；无参数启动 ratatui 交互界面 |
+| `MiPCM_Patch_GUI_v*.*.*.exe` | `src/ui/gui/app.rs` | Slint 图形界面，支持一键下载安装或展开手动来源 |
+| `MiPCM_Patch_CLI_v*.*.*.exe` | `src/main.rs` | clap 命令行；无参数启动 ratatui 交互界面 |
 
 核心库 (`src/lib.rs`) 将各模块聚合为 `ops` 层的高层操作，确保两个前端调用完全相同的逻辑。
 
