@@ -1,0 +1,58 @@
+name: Verify one-click installer
+on:
+  push:
+    branches: [ci/one-click-install-check]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo check lib
+        run: cargo check --lib
+      - name: cargo check CLI
+        run: cargo check --bin MiPCM_CLI
+      - name: cargo check GUI
+        run: cargo check --bin MiPCM_GUI
+      - name: cargo test
+        run: cargo test
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: cargo release
+        run: cargo build --release --bin MiPCM_GUI --bin MiPCM_CLI
+      - name: Package sources and binaries
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:GITHUB_WORKSPACE 'verified-artifacts'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Copy-Item -LiteralPath 'target/release/MiPCM_GUI.exe', 'target/release/MiPCM_CLI.exe' -Destination $outDir
+          # aria2 的源码和许可随产物提供；无需将源码内嵌到 GUI/CLI 中。
+          $sourceDir = Join-Path $env:RUNNER_TEMP 'aria2-sources'
+          New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+          $ProgressPreference = 'SilentlyContinue'
+          $sources = Get-Content -Raw -LiteralPath 'assets/aria2/sources.json' | ConvertFrom-Json
+          foreach ($source in $sources) {
+            $dest = Join-Path $sourceDir $source.name
+            Invoke-WebRequest -Uri $source.url -OutFile $dest
+            if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash -ne $source.sha256) {
+              throw "aria2 源码 SHA-256 不匹配：$($source.name)"
+            }
+          }
+          foreach ($notice in @('NOTICE.md', 'COPYING', 'LICENSE.OpenSSL', 'AUTHORS', 'README.mingw', 'sources.json')) {
+            Copy-Item -LiteralPath (Join-Path 'assets/aria2' $notice) -Destination $sourceDir
+          }
+          Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $sourceDir 'COPYING.GPLv3')
+          Compress-Archive -Path (Join-Path $sourceDir '*') -DestinationPath (Join-Path $outDir 'aria2-1.37.0-sources.zip') -Force
+
+
+          Get-ChildItem -LiteralPath $outDir | Select-Object Name, Length | Format-Table
+      - uses: actions/upload-artifact@v6
+        with:
+          name: MiPCM-one-click-install
+          path: verified-artifacts/
