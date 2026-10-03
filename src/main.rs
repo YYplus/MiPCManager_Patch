@@ -475,8 +475,14 @@ fn console_download_progress(lang: i18n::Lang) -> impl FnMut(ops::DownloadProgre
     let mut previous_phase = None;
     move |progress| {
         if terminal {
-            eprint!("\r{:<100}", ops::download_progress_text(progress, lang));
-            let _ = std::io::stderr().flush();
+            let mut stderr = std::io::stderr();
+            let _ = crossterm::execute!(
+                stderr,
+                crossterm::cursor::MoveToColumn(0),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+            );
+            eprint!("{}", ops::download_progress_text(progress, lang));
+            let _ = stderr.flush();
         } else if previous_phase != Some(progress.phase) {
             eprintln!("{}", ops::download_progress_text(progress, lang));
         }

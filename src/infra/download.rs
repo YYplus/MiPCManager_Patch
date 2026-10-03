@@ -326,8 +326,6 @@ fn download_partial(
     }
     #[cfg(test)]
     command
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
         .env_remove("http_proxy")
         .env_remove("https_proxy")
         .env_remove("all_proxy")
@@ -749,10 +747,7 @@ mod tests {
                             let data = worker_data.clone();
                             let ranges = worker_ranges.clone();
                             handlers.push(thread::spawn(move || {
-                                if let Err(error) = serve(stream, &data, &ranges, ranged, throttled)
-                                {
-                                    eprintln!("HTTP fixture request failed: {error:#}");
-                                }
+                                let _ = serve(stream, &data, &ranges, ranged, throttled);
                             }));
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -790,6 +785,8 @@ mod tests {
         ranged: bool,
         throttled: bool,
     ) -> Result<()> {
+        // Windows 的新连接继承监听 socket 的非阻塞模式；write_all 需要阻塞连接。
+        stream.set_nonblocking(false)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
         let mut reader = BufReader::new(stream.try_clone()?);
