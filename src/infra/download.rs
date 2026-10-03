@@ -312,6 +312,9 @@ fn download_partial(
         }
     }
     let directory = std::path::absolute(part.parent().context("无法确定下载目录")?)?;
+    let directory = directory
+        .to_str()
+        .context("下载目录包含无效的 Unicode 字符")?;
     let mut options = json!({"dir": directory, "out": part.file_name().and_then(|name| name.to_str()).context("无法确定下载文件名")?});
     if let Some(expected) = checksum {
         options["checksum"] = json!(format!("sha-256={expected}"));
@@ -441,8 +444,23 @@ impl RpcClient {
         let body = serde_json::to_vec(
             &json!({"jsonrpc": "2.0", "id": "mipcm", "method": method, "params": params}),
         )?;
+        match self.request(&body) {
+            Err(error)
+                if method == "aria2.tellStatus"
+                    && error.downcast_ref::<std::io::Error>().is_some() =>
+            {
+                // 只重试只读进度查询；addUri 等修改操作不能重发，避免创建重复任务。
+                thread::sleep(Duration::from_millis(50));
+                self.request(&body).context("重新查询下载进度失败")
+            }
+            result => result,
+        }
+    }
+
+    fn request(&self, body: &[u8]) -> Result<Value> {
         let timeout = Duration::from_secs(2);
         let mut stream = TcpStream::connect_timeout(&self.address, timeout)?;
+        stream.set_nodelay(true)?;
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
         write!(
@@ -451,14 +469,18 @@ impl RpcClient {
             self.address,
             body.len()
         )?;
-        stream.write_all(&body)?;
+        stream.write_all(body)?;
         let mut reader = BufReader::new(stream);
         let mut header = String::new();
         let mut length = None;
         loop {
             let mut line = String::new();
             if reader.by_ref().take(8192).read_line(&mut line)? == 0 {
-                bail!("下载器响应不完整");
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "下载器响应不完整",
+                )
+                .into());
             }
             header.push_str(&line);
             if header.len() > 8192 {
@@ -648,7 +670,12 @@ mod tests {
             &DownloadControl::default(),
             |_| {},
         );
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(
+            format!("{error:#}").contains("aria2 下载失败（32）"),
+            "{error:#}"
+        );
+        assert!(sidecar(&target, ".part").is_file());
         assert!(!target.exists());
     }
 
