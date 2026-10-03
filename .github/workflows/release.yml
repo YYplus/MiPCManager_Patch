@@ -109,7 +109,12 @@ jobs:
           $sources = Get-Content -Raw -LiteralPath 'assets/aria2/sources.json' | ConvertFrom-Json
           foreach ($source in $sources) {
             $dest = Join-Path $sourceDir $source.name
-            Invoke-WebRequest -Uri $source.url -OutFile $dest
+            Write-Host "Downloading aria2 source: $($source.name)"
+            curl.exe --ipv4 --fail --location --retry 3 --retry-all-errors `
+              --connect-timeout 15 --max-time 60 --output $dest $source.url
+            if ($LASTEXITCODE -ne 0) {
+              throw "aria2 源码下载失败：$($source.name)"
+            }
             if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash -ne $source.sha256) {
               throw "aria2 源码 SHA-256 不匹配：$($source.name)"
             }

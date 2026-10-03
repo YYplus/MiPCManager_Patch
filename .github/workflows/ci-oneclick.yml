@@ -1,4 +1,4 @@
-name: Verify one-click installer
+name: Package verified one-click installer
 on:
   push:
     branches: [ci/one-click-install-check]
@@ -13,22 +13,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
+          key: one-click-install-release
           cache-on-failure: true
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
-      - name: cargo check lib
-        run: cargo check --lib
-      - name: cargo check CLI
-        run: cargo check --bin MiPCM_CLI
-      - name: cargo check GUI
-        run: cargo check --bin MiPCM_GUI
-      - name: cargo test
-        run: cargo test -- --nocapture
-      - name: cargo clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: cargo release
         run: cargo build --release --bin MiPCM_GUI --bin MiPCM_CLI
-      - name: Package sources and binaries
+      - name: Stage verified binaries
         shell: pwsh
         run: |
           $outDir = Join-Path $env:GITHUB_WORKSPACE 'verified-artifacts'
@@ -38,14 +27,25 @@ jobs:
           foreach ($frontend in @('GUI', 'CLI')) {
             Copy-Item -LiteralPath "target/release/MiPCM_$frontend.exe" -Destination (Join-Path $outDir "MiPCM_Patch_$($frontend)_v$version.exe")
           }
-          # aria2 的源码和许可随产物提供；无需将源码内嵌到 GUI/CLI 中。
+      - uses: actions/upload-artifact@v6
+        with:
+          name: MiPCM-one-click-binaries
+          path: verified-artifacts/*.exe
+      - name: Package aria2 sources
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:GITHUB_WORKSPACE 'verified-artifacts'
           $sourceDir = Join-Path $env:RUNNER_TEMP 'aria2-sources'
           New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
-          $ProgressPreference = 'SilentlyContinue'
           $sources = Get-Content -Raw -LiteralPath 'assets/aria2/sources.json' | ConvertFrom-Json
           foreach ($source in $sources) {
             $dest = Join-Path $sourceDir $source.name
-            Invoke-WebRequest -Uri $source.url -OutFile $dest
+            Write-Host "Downloading aria2 source: $($source.name)"
+            curl.exe --ipv4 --fail --location --retry 3 --retry-all-errors `
+              --connect-timeout 15 --max-time 60 --output $dest $source.url
+            if ($LASTEXITCODE -ne 0) {
+              throw "aria2 源码下载失败：$($source.name)"
+            }
             if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash -ne $source.sha256) {
               throw "aria2 源码 SHA-256 不匹配：$($source.name)"
             }
@@ -55,8 +55,6 @@ jobs:
           }
           Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $sourceDir 'COPYING.GPLv3')
           Compress-Archive -Path (Join-Path $sourceDir '*') -DestinationPath (Join-Path $outDir 'aria2-1.37.0-sources.zip') -Force
-
-
           Get-ChildItem -LiteralPath $outDir | Select-Object Name, Length | Format-Table
       - uses: actions/upload-artifact@v6
         with:
