@@ -292,7 +292,6 @@ fn download_partial(
             "--file-allocation=none",
             "--auto-file-renaming=false",
             "--allow-overwrite=false",
-            "--continue=true",
             "--always-resume=false",
             "--auto-save-interval=1",
             "--max-tries=5",
@@ -308,6 +307,11 @@ fn download_partial(
             "--show-console-readout=false",
             "--console-log-level=error",
         ])
+        .arg(if connections == 1 {
+            "--continue=false"
+        } else {
+            "--continue=true"
+        })
         .arg(format!("--split={connections}"))
         .arg(format!("--max-connection-per-server={connections}"))
         .arg(format!("--rpc-listen-port={}", address.port()))
@@ -688,7 +692,7 @@ mod tests {
 
     #[test]
     fn checksum_failure_never_promotes_a_download_to_exe() {
-        let fixture = HttpFixture::new(true, false);
+        let fixture = HttpFixture::new(false, false);
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("setup.exe");
         let result = download(
