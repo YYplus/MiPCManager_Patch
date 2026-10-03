@@ -257,6 +257,7 @@ pub struct App {
     patch_idx: usize,
     patch_btn_idx: usize,
     uninstall_idx: usize,
+    install_idx: usize,
     log_scroll: usize,
 
     device_preset_idx: usize,
@@ -285,6 +286,7 @@ impl App {
             patch_idx: 0,
             patch_btn_idx: 0,
             uninstall_idx: 0,
+            install_idx: 0,
             log_scroll: 0,
             device_preset_idx: 0,
             smbios_preset_idx: 0,
@@ -538,8 +540,13 @@ impl App {
     }
 
     fn handle_install_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Enter {
-            let label = i18n::tr("install.title", self.lang).to_string();
+        if code == KeyCode::Up {
+            self.install_idx = self.install_idx.saturating_sub(1);
+        } else if code == KeyCode::Down {
+            self.install_idx = (self.install_idx + 1).min(ops::RecommendedInstaller::ALL.len() - 1);
+        } else if code == KeyCode::Enter {
+            let source = ops::RecommendedInstaller::ALL[self.install_idx];
+            let label = source.label(self.lang).to_string();
             // 在派发线程之前设置 busy，避免连续按 Enter 排队重复安装。
             self.op_running = true;
             self.op_label = label.clone();
@@ -547,7 +554,7 @@ impl App {
             self.download_control = Some(control.clone());
             let progress_tx = self.tx.clone();
             spawn_op(self.tx.clone(), label, self.lang, move || {
-                ops::download_and_install_pc_manager(None, &control, |progress| {
+                ops::download_and_install_recommended(source, &control, |progress| {
                     let _ = progress_tx.send(LogMessage::DownloadProgress(progress));
                 })
             });
@@ -872,64 +879,41 @@ impl App {
         f.render_widget(block, area);
 
         let lang = self.lang;
-        let lines = vec![
-            Line::from(Span::styled(
+        let mut lines = Vec::new();
+        for (index, source) in ops::RecommendedInstaller::ALL.into_iter().enumerate() {
+            let selected = index == self.install_idx;
+            lines.push(Line::from(Span::styled(
                 format!(
-                    "{} ({})",
-                    i18n::tr("tui.install.manager.enter", lang),
-                    ops::RECOMMENDED_PC_MANAGER_VERSION
+                    "{} {}",
+                    if selected { "▶" } else { " " },
+                    source.label(lang)
                 ),
-                theme::item_selected(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.xiaoai.enter", lang),
-                theme::item_selected(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.title", lang),
+                if selected {
+                    theme::item_selected()
+                } else {
+                    theme::item_hint()
+                },
+            )));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(
+            ops::RecommendedInstaller::ALL[self.install_idx].requirement(lang),
+        ));
+        lines.push(Line::from(""));
+        for key in [
+            "tui.install.xiaoai.enter",
+            "tui.install.title",
+            "tui.install.hint.cmd1",
+            "tui.install.hint.cmd2",
+            "tui.install.hint.xiaoai1",
+            "tui.install.hint.xiaoai2",
+            "install.xiaoai.note",
+        ] {
+            lines.push(Line::from(Span::styled(
+                i18n::tr(key, lang),
                 theme::item_hint(),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.cmd1", lang),
-                Style::default()
-                    .fg(theme::CYAN)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.cmd2", lang),
-                Style::default()
-                    .fg(theme::CYAN)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("install.xiaoai.title", lang),
-                theme::item_hint(),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.xiaoai1", lang),
-                Style::default()
-                    .fg(theme::PURPLE)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.xiaoai2", lang),
-                Style::default()
-                    .fg(theme::PURPLE)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("install.xiaoai.note", lang),
-                theme::item_hint(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.desc", lang),
-                theme::item_hint(),
-            )),
-        ];
+            )));
+        }
 
         f.render_widget(
             Paragraph::new(Text::from(lines))

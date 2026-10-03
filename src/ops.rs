@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub use crate::infra::download::{DownloadControl, DownloadPhase, DownloadProgress};
-pub use pc_manager_installer::RECOMMENDED_VERSION as RECOMMENDED_PC_MANAGER_VERSION;
+pub use install::sources::RecommendedInstaller;
 
 /// 小米电脑管家相关进程（不含扩展名），用于启动时全量关闭的兜底匹配。
 pub const PROC_MIPCM_ALL: &[&str] = &[
@@ -630,13 +630,26 @@ pub fn uninstall_product() -> Result<Vec<String>> {
 
 // ===================== 安装 =====================
 
+/// 下载选定内置版本，沿用对应产品的安装和补丁流程。
+pub fn download_and_install_recommended(
+    source: RecommendedInstaller,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<Vec<String>> {
+    if source == RecommendedInstaller::Xiaoai {
+        download_and_install_xiaoai(source.url(), control, progress)
+    } else {
+        download_and_install_pc_manager(Some(source.url()), control, progress)
+    }
+}
+
 /// 推荐版或手动地址下载后，沿用现有安装器启动流程。
 pub fn download_and_install_pc_manager(
     url: Option<&str>,
     control: &DownloadControl,
     progress: impl FnMut(DownloadProgress),
 ) -> Result<Vec<String>> {
-    let url = url.unwrap_or(pc_manager_installer::RECOMMENDED_URL).trim();
+    let url = url.unwrap_or(RecommendedInstaller::PcManager.url()).trim();
     let kind = pc_manager_installer::classify_installer(Path::new(
         &pc_manager_installer::download_filename(url)?,
     ));
@@ -645,11 +658,11 @@ pub fn download_and_install_pc_manager(
         install::find_install_root().as_deref(),
         install::find_pc_continuity_root().as_deref(),
     )?;
-    let dir = pc_manager_installer::download_dir(url)?;
+    let dir = install::sources::download_dir(url)?;
     let installer = pc_manager_installer::download_installer(url, &dir, control, progress)?;
     control.check_cancelled()?;
     let _installer_guard =
-        pc_manager_installer::protect_downloaded_installer(&installer, url, control)?;
+        install::sources::protect_downloaded_installer(&installer, url, control)?;
     let mut log = vec![format!("✓ 安装包已下载：{}", installer.display())];
     log.extend(install_from_path(&installer)?);
     Ok(log)
@@ -662,11 +675,11 @@ pub fn download_and_install_xiaoai(
     progress: impl FnMut(DownloadProgress),
 ) -> Result<Vec<String>> {
     let url = url.trim();
-    let dir = pc_manager_installer::download_dir(url)?;
+    let dir = install::sources::download_dir(url)?;
     let installer = xiaoai_installer::download_installer(url, &dir, control, progress)?;
     control.check_cancelled()?;
     let _installer_guard =
-        pc_manager_installer::protect_downloaded_installer(&installer, url, control)?;
+        install::sources::protect_downloaded_installer(&installer, url, control)?;
     let mut log = vec![format!("✓ 超级小爱安装包已下载：{}", installer.display())];
     log.extend(install_xiaoai_from_path(&installer)?);
     Ok(log)

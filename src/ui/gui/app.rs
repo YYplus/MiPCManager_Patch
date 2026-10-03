@@ -28,7 +28,18 @@ fn main() {
     let app = AppWindow::new().unwrap();
 
     app.on_tr(move |key: SharedString| -> SharedString { i18n::tr(&key, lang).into() });
-    app.set_recommended_version(ops::RECOMMENDED_PC_MANAGER_VERSION.into());
+    let sources = ops::RecommendedInstaller::MANAGER_VARIANTS;
+    app.set_manager_sources(ModelRc::new(VecModel::from(
+        sources
+            .map(|source| SharedString::from(source.label(lang)))
+            .to_vec(),
+    )));
+    app.set_manager_requirements(ModelRc::new(VecModel::from(
+        sources
+            .map(|source| SharedString::from(source.requirement(lang)))
+            .to_vec(),
+    )));
+    app.set_xiaoai_source(ops::RecommendedInstaller::Xiaoai.label(lang).into());
 
     let presets: Vec<SharedString> = ds::PRESETS
         .iter()
@@ -419,12 +430,40 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             if app.get_downloading() {
                 return;
             }
+            let Some(source) = ops::RecommendedInstaller::MANAGER_VARIANTS
+                .get(app.get_manager_source_idx() as usize)
+                .copied()
+            else {
+                return;
+            };
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
-                i18n::tr("install.title", lang).into(),
+                source.label(lang).into(),
                 InstallProduct::Manager,
                 lang,
-                |control, progress| ops::download_and_install_pc_manager(None, control, progress),
+                move |control, progress| {
+                    ops::download_and_install_recommended(source, control, progress)
+                },
+            ));
+        }
+    });
+
+    app.on_install_recommended_xiaoai({
+        let app_weak = app_weak.clone();
+        let download = xiaoai_download.clone();
+        move || {
+            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) {
+                return;
+            }
+            let source = ops::RecommendedInstaller::Xiaoai;
+            *download.borrow_mut() = Some(spawn_install_operation(
+                app_weak.clone(),
+                source.label(lang).into(),
+                InstallProduct::Xiaoai,
+                lang,
+                move |control, progress| {
+                    ops::download_and_install_recommended(source, control, progress)
+                },
             ));
         }
     });

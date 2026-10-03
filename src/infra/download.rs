@@ -87,8 +87,11 @@ pub fn download(
     progress(DownloadProgress::default());
     if target.try_exists()? {
         let expected = checksum.context("下载目标已存在；请选择本地安装，或先移走该文件")?;
+        let total = fs::metadata(target)?.len();
         progress(DownloadProgress {
             phase: DownloadPhase::Verifying,
+            completed: total,
+            total,
             ..Default::default()
         });
         verify_checksum(target, expected, control)?;
@@ -120,8 +123,11 @@ pub fn download(
     }
     download_partial(url, &part, checksum, control, &mut progress)?;
     if let Some(expected) = checksum {
+        let total = fs::metadata(&part)?.len();
         progress(DownloadProgress {
             phase: DownloadPhase::Verifying,
+            completed: total,
+            total,
             ..Default::default()
         });
         verify_checksum(&part, expected, control)?;
@@ -183,7 +189,7 @@ pub fn verify_open_file(file: &mut File, expected: &str, control: &DownloadContr
         hash.update(&block[..count]);
     }
     if !format!("{:x}", hash.finalize()).eq_ignore_ascii_case(expected) {
-        bail!("SHA-256 不匹配；不会运行该安装包");
+        bail!("SHA-256 不匹配；文件可能损坏或官方安装包已更新，不会运行该安装包");
     }
     Ok(())
 }
@@ -210,6 +216,7 @@ fn unpack_payload(path: &Path) -> Result<()> {
     let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     std::io::copy(&mut decoder, &mut file).context("无法解压内嵌下载器")?;
     file.sync_all()?;
+    drop(file);
     verify_checksum(path, PAYLOAD_SHA256, &DownloadControl::default())
 }
 

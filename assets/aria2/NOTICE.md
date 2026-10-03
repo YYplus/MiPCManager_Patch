@@ -19,13 +19,13 @@ Artifact URL:
 https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip
 
 To reproduce the embedded gzip, extract `aria2c.exe` from that artifact and use
-Python `gzip.compress(exe_bytes, compresslevel=9, mtime=0)`. The downloader verifies
+Python 3.12 on Linux: `gzip.compress(exe_bytes, compresslevel=9, mtime=0)`. The downloader verifies
 the decompressed executable before starting it. No user-installed aria2 or
 user-provided aria2 configuration is used.
 
 ## License and corresponding source
 
-Copyright (C) 2006–2023 Tatsuhiro Tsujikawa and the contributors listed in
+Copyright (C) 2006, 2019 Tatsuhiro Tsujikawa and the contributors listed in
 [AUTHORS](AUTHORS). aria2 is licensed under GPL-2.0-or-later with the upstream
 OpenSSL linking exception. This redistribution uses GPLv3, matching
 MiPCManager_Patch. [COPYING](COPYING), [LICENSE.OpenSSL](LICENSE.OpenSSL), and

@@ -1,7 +1,7 @@
 //! 超级小爱安装器启动、等待和安装目录定位。
 
 use crate::infra::download::{self, DownloadControl, DownloadProgress};
-use crate::install::pc_manager_installer;
+use crate::install::{pc_manager_installer, sources};
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,7 +43,13 @@ pub fn download_installer(
     } else {
         &downloaded_name
     };
-    download::download(url, &target_dir.join(filename), None, control, progress)
+    download::download(
+        url,
+        &target_dir.join(filename),
+        sources::checksum_for_url(url),
+        control,
+        progress,
+    )
 }
 
 /// 返回安装根目录下版本号最高的目录，不限制具体版本。

@@ -31,7 +31,10 @@ export component AppWindow inherits Window {
     in-out property <bool> xiaoai-busy: false;
     in-out property <bool> manager-manual: false;
     in-out property <bool> xiaoai-manual: false;
-    in-out property <string> recommended-version;
+    in-out property <[string]> manager-sources;
+    in-out property <[string]> manager-requirements;
+    in-out property <int> manager-source-idx: 0;
+    in-out property <string> xiaoai-source;
     in-out property <float> manager-progress: 0;
     in-out property <string> manager-progress-text;
     in-out property <bool> manager-download-active: false;
@@ -70,6 +73,7 @@ export component AppWindow inherits Window {
     callback revert-xiaoai();
     callback download-and-install(string);
     callback install-recommended();
+    callback install-recommended-xiaoai();
     callback cancel-download();
     callback cancel-xiaoai-download();
     callback browse-installer();
@@ -456,8 +460,14 @@ export component AppWindow inherits Window {
                                 font-size: 16px;
                             }
 
+                            ComboBox {
+                                model: root.manager-sources;
+                                current-index <=> root.manager-source-idx;
+                                enabled: !root.downloading;
+                            }
                             Text {
-                                text: root.tr("install.recommended") + " " + root.recommended-version;
+                                text: root.manager-requirements[root.manager-source-idx];
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -555,9 +565,19 @@ export component AppWindow inherits Window {
                             }
                             Text {
                                 text: root.tr("install.xiaoai.note");
+                                wrap: word-wrap;
                             }
+                            Text { text: root.xiaoai-source; }
                             HorizontalLayout {
                                 spacing: 6px;
+                                Button {
+                                    height: 30px;
+                                    width: 166px;
+                                    primary: true;
+                                    text: root.tr("install.one-click");
+                                    enabled: !root.xiaoai-busy;
+                                    clicked => { root.install-recommended-xiaoai(); }
+                                }
                                 Button {
                                     height: 30px;
                                     text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");

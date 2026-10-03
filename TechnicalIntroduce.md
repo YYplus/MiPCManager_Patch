@@ -8,7 +8,7 @@
 
 | 产物 | 入口 | 说明 |
 |---|---|---|
-| `MiPCM_GUI_v*.*.*.exe` | `src/ui/gui/app.rs` | Slint 图形界面，支持选择本地安装包或输入下载地址 |
+| `MiPCM_GUI_v*.*.*.exe` | `src/ui/gui/app.rs` | Slint 图形界面，支持一键下载安装或展开手动来源 |
 | `MiPCM_CLI_v*.*.*.exe` | `src/main.rs` | clap 命令行；无参数启动 ratatui 交互界面 |
 
 核心库 (`src/lib.rs`) 将各模块聚合为 `ops` 层的高层操作，确保两个前端调用完全相同的逻辑。
@@ -151,22 +151,26 @@ if (exception_id == CameraExceptionId.kLOCAL_CAMERA_DISABLED)
 
 ## 安装小米电脑管家
 
-GUI 默认提供推荐版电脑管家的「一键下载安装」，手动安装展开后可输入 HTTP(S) 网址或选择本地 `.exe`。下载前及启动前均校验产品共存限制：电脑管家不能与小米互联 / PcContinuity / HyperConnect 同时安装。CLI 的 `install --recommended` 直接获取推荐版；不带安装来源参数时保留同目录安装包扫描，找到多个时请用户选择，如未找到则提供推荐下载、手动网址和本地路径三种选项。
+GUI 提供电脑管家 5.8.1.130、小米互联 Windows 版 1.1.2.36 和 Windows 内测版 2.0.2.524 选择，超级小爱 3.5.0.220 使用独立的一键入口。互联 Windows 版需配合 HyperOS 3 Beta 及以上手机，内测版需配合 HyperOS 4 及以上手机/平板。手动安装展开后可输入 HTTP(S) 网址或选择本地 `.exe`。下载前及启动前均校验产品共存限制：电脑管家不能与小米互联 / PcContinuity / HyperConnect 同时安装。
+
+CLI 使用 `install --recommended [manager|continuity|hyperconnect-beta]`，省略版本选项时选择电脑管家；不带安装来源参数时保留同目录安装包扫描，未找到则提供三个内置来源、手动网址和本地路径选择。TUI 安装面板按 ↑↓ 选择四种来源，Enter 下载安装，C 取消下载。
 
 启动安装包前，工具会在安装包同目录临时准备 `msimg32.dll`，写入默认伪装机型，然后挂起启动安装器、注入代理并旁路系统版本与机型检查。安装器启动成功后，安装包目录中的临时文件会恢复为操作前的状态。
 
 **URL 下载**：`infra::download` 解压并校验内嵌 aria2，仅在下载期间启动隐藏窗口的子进程，结束后退出并移除下载器临时目录。最多八路连接；进度从本次子进程的 loopback JSON-RPC 读取，不以文件大小估算。会话使用随机令牌，不读取用户 aria2 配置。URL 与路径作为 JSON 数据传入，不拼接到 PowerShell 或 shell 命令中。
 
-下载缓存按 URL 隔离，位于 `%LOCALAPPDATA%\MiPCManager_Patch\downloads`。下载先写 `.part`，aria2 的 `.aria2` 控制文件与来源 `.download.meta` 支持续传，完成后保存为 `.exe`。跨进程文件锁防止重复下载同一目标，保存时不覆盖同名文件。推荐版电脑管家固定版本、地址与 SHA-256；通过校验的缓存可复用，校验失败不会启动。手动地址没有预置哈希，其完整同名文件保留并报错，可转为本地安装。取消下载不等于取消已经启动的安装器。
+下载缓存按 URL 及固定 SHA-256 隔离，位于 `%LOCALAPPDATA%\MiPCManager_Patch\downloads`。下载先写 `.part`，aria2 的 `.aria2` 控制文件与来源 `.download.meta` 支持续传，完成后保存为 `.exe`。跨进程文件锁防止重复下载同一目标，保存时不覆盖同名文件。内置来源的地址和 SHA-256 集中维护于 `install::sources`；通过校验的缓存可复用，校验失败不会启动。HyperConnect 内测地址会由官方滚动更新，更新后的安装包需要同步更新内置 SHA-256。手动地址没有预置哈希，其完整同名文件保留并报错，可转为本地安装。取消下载不等于取消已经启动的安装器。
 
 **命令行选项**：
-- `--recommended`：下载并安装内置推荐版电脑管家
+- `--recommended [manager|continuity|hyperconnect-beta]`：选择内置电脑管家、互联 Windows 版或内测版，默认电脑管家
 - `--installer <exe>`：显式指定安装包路径
 - `--url <url>`：通过 HTTP(S) 下载安装包
 
 ## 安装超级小爱并注入补丁
 
 超级小爱安装流程复用通用的安装包查找、下载、目录探测、原子写入和备份能力，但使用独立的 `userenv.dll`，不会复用小米电脑管家的 `msimg32.dll`。
+
+GUI 提供内置 3.5.0.220 的一键安装；CLI 使用 `xiaoai install --recommended`，手动来源与本地扫描行为保持不变。
 
 超级小爱安装器仅接受以下两个文件名（不区分大小写）；本地自动查找也只匹配这两个名称：
 
@@ -220,7 +224,7 @@ GUI 使用 Slint 声明式界面构建。主要布局：
 
 - **安装状态区**：显示当前安装位置和各补丁状态
 - **补丁操作区**：应用 / 还原按钮，含机型选择下拉框和自定义输入
-- **安装区**：支持选择本地 `.exe` 安装包或输入下载地址，超级小爱安装任务在后台等待安装器完成
+- **安装区**：提供内置版本选择及一键下载，展开手动来源后选择本地 `.exe` 或输入地址；下载进度在事件线程更新，下载及安装任务在后台运行
 - **日志区**：实时显示操作日志
 
 界面声明位于 `src/ui/app.slint`，Rust 侧事件与异步任务编排位于 `src/ui/gui/app.rs`。
@@ -232,7 +236,7 @@ src/
 ├── lib.rs                       # 核心库入口，聚合各模块
 ├── ops.rs                       # 高层操作（apply/revert/status/install）
 ├── elevate.rs                   # 管理员提权兜底
-├── infra/                       # PE、字节、注册表、PowerShell 基础设施
+├── infra/                       # PE、字节、注册表、PowerShell、下载基础设施
 ├── patches/
 │   ├── locale/mod.rs            # 地区伪装
 │   ├── camera/                  # 摄像头弹窗抑制与 .NET 方法体处理

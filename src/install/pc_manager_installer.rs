@@ -5,12 +5,8 @@ use std::path::{Path, PathBuf};
 use crate::{
     i18n,
     infra::download::{self, DownloadControl, DownloadProgress},
+    install::sources,
 };
-
-pub const RECOMMENDED_VERSION: &str = "5.8.1.130";
-pub const RECOMMENDED_URL: &str = "https://cdn.cnbj1.fds.api.mi-img.com/ota-packages/TS4L_XiaomiPCManager_feature_p52_5.8.1.130_b5a04836.exe";
-pub const RECOMMENDED_SHA256: &str =
-    "d812cf30805d172474eb33b2f97f37129593f9d50f09d4224f73d530a2cb40e9";
 
 /// 安装包所属产品。
 ///
@@ -49,10 +45,11 @@ const HYPERCONNECT_MARKER: &str = "hyperconnect";
 
 /// 根据文件名判定安装包所属产品；非安装包返回 `None`。
 ///
-/// 识别三类命名：
+/// 识别四类命名：
 /// - `*_XiaomiPCManager_*.exe`（完整版小米电脑管家）。
 /// - 含「小米互联」且以 `.exe` 结尾（小米互联最新版本_1.1.2.36_d887cad6.exe 等）。
 /// - 含 `HyperConnect` 且以 `.exe` 结尾（互联互通 2.0 安装包）。
+/// - 含 `PcContinuity` 且以 `.exe` 结尾（小米互联 Windows 安装包）。
 pub fn classify_installer_filename(name: &str) -> Option<InstallerKind> {
     if !name.to_ascii_lowercase().ends_with(".exe") {
         return None;
@@ -62,7 +59,7 @@ pub fn classify_installer_filename(name: &str) -> Option<InstallerKind> {
         return Some(InstallerKind::PcContinuity);
     }
     let lower = name.to_ascii_lowercase();
-    if lower.contains(HYPERCONNECT_MARKER) {
+    if lower.contains(HYPERCONNECT_MARKER) || lower.contains("pccontinuity") {
         return Some(InstallerKind::PcContinuity);
     }
     let stem = lower.strip_suffix(".exe")?;
@@ -170,33 +167,8 @@ pub fn download_installer(
     progress: impl FnMut(DownloadProgress),
 ) -> Result<PathBuf> {
     let target = target_dir.join(download_filename(url)?);
-    let checksum = (url == RECOMMENDED_URL).then_some(RECOMMENDED_SHA256);
+    let checksum = sources::checksum_for_url(url);
     download::download(url, &target, checksum, control, progress)
-}
-
-/// 缓存按下载地址隔离，避免不同产品或同名安装包共用代理 DLL / 续传文件。
-pub fn download_dir(url: &str) -> Result<PathBuf> {
-    use sha2::{Digest, Sha256};
-    let base = std::env::var_os("LOCALAPPDATA").context("无法确定 LocalAppData 下载缓存目录")?;
-    let identity = format!("{:x}", Sha256::digest(url.as_bytes()));
-    Ok(PathBuf::from(base)
-        .join("MiPCManager_Patch")
-        .join("downloads")
-        .join(identity))
-}
-
-/// 启动前重新验证推荐版，并保持读锁直到 CreateProcess 完成。
-pub fn protect_downloaded_installer(
-    installer: &Path,
-    url: &str,
-    control: &DownloadControl,
-) -> Result<fs::File> {
-    let mut file = download::lock_file_for_read(installer)?;
-    if url == RECOMMENDED_URL {
-        download::verify_open_file(&mut file, RECOMMENDED_SHA256, control)?;
-    }
-    control.check_cancelled()?;
-    Ok(file)
 }
 
 /// 启动安装包，返回子进程 PID。
@@ -844,6 +816,15 @@ mod tests {
             classify_installer_filename("小米互联.exe"),
             Some(InstallerKind::PcContinuity)
         );
+        for name in [
+            "QKTo_PcContinuity_hotfix_88a510d20d_1.1.2.36_d887cad6.exe",
+            "HyperConnect_AI.exe",
+        ] {
+            assert_eq!(
+                classify_installer_filename(name),
+                Some(InstallerKind::PcContinuity)
+            );
+        }
         // 新版 HyperConnect 2.0 安装包（英文命名）。
         assert_eq!(
             classify_installer_filename("HyperConnect_2.0.0.429_abc123.exe"),
