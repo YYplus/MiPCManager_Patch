@@ -86,9 +86,9 @@ pub fn checksum_for_url(url: &str) -> Option<&'static str> {
         .map(RecommendedInstaller::checksum)
 }
 
-/// 缓存按来源及固定校验值隔离，更新推荐版本不复用旧安装包或续传文件。
+/// 下载缓存放在 Windows 临时目录，按来源及校验值隔离，便于系统清理。
 pub fn download_dir(url: &str) -> Result<PathBuf> {
-    let base = std::env::var_os("LOCALAPPDATA").context("无法确定 LocalAppData 下载缓存目录")?;
+    let base = std::env::var_os("TEMP").context("无法确定 Windows 临时下载缓存目录")?;
     let identity = format!(
         "{:x}",
         Sha256::digest(format!(
