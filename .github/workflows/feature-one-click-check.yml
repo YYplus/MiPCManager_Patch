@@ -1,0 +1,57 @@
+name: Verify unified feature branch
+
+on:
+  push:
+    branches:
+      - feature/one-click-install
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: unified-feature-release
+          cache-on-failure: true
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo check lib
+        run: cargo check --lib
+
+      - name: cargo check CLI
+        run: cargo check --bin MiPCM_CLI
+
+      - name: cargo check GUI
+        run: cargo check --bin MiPCM_GUI
+
+      - name: cargo test
+        run: cargo test --all-features -- --nocapture
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build release GUI
+        run: cargo build --release --bin MiPCM_GUI
+
+      - name: Stage preview executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target\release\MiPCM_GUI.exe dist\MiPCM_Patch_UI_Preview.exe
+
+      - name: Upload GUI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiPCM-Patch-Unified-Preview
+          path: dist/MiPCM_Patch_UI_Preview.exe
+          retention-days: 3
