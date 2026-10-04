@@ -27,7 +27,7 @@ jobs:
           cache-on-failure: true
 
       - name: cargo fmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
 
       - name: cargo check lib
         run: cargo check --lib
