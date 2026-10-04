@@ -27,6 +27,8 @@ export component AppWindow inherits Window {
     in-out property <bool> state-refreshing: false;
     in-out property <int> state-generation: 0;
     in-out property <bool> operation-busy: false;
+    private property <length> operation-row-height: 48px;
+    private property <length> operation-row-spacing: 4px;
     private property <bool> controls-ready: root.state-ready && !root.operation-busy && !root.downloading && !root.xiaoai-busy;
     in-out property <bool> full-features: false;
     in-out property <bool> continuity-available: false;
@@ -120,20 +122,6 @@ export component AppWindow inherits Window {
         spacing: 8px;
 
         HorizontalLayout {
-            spacing: 8px;
-            Text {
-                text: root.tr("app.title");
-                font-size: 24px;
-                font-weight: 700;
-                vertical-alignment: center;
-            }
-            HorizontalLayout {
-                alignment: end;
-                Button { height: 30px; width: 80px; text: root.tr("btn.refresh"); clicked => { root.refresh(); } }
-            }
-        }
-
-        HorizontalLayout {
             spacing: 12px;
 
             VerticalLayout {
@@ -148,10 +136,14 @@ export component AppWindow inherits Window {
                         padding: 16px;
                         spacing: 8px;
                         HorizontalLayout {
+                            min-height: root.operation-row-height;
+                            max-height: root.operation-row-height;
+                            cross-axis-alignment: center;
                             Text { text: root.tr("gui.log.title"); font-weight: 700; font-size: 16px; vertical-alignment: center; }
                             HorizontalLayout {
+                                cross-axis-alignment: center;
                                 alignment: end;
-                                Button { height: 30px; width: 80px; text: root.tr("btn.clear-log"); clicked => { root.clear-log(); } }
+                                Button { height: 34px; width: 80px; text: root.tr("btn.clear-log"); clicked => { root.clear-log(); } }
                             }
                         }
                         if root.last-error != "": Text { text: root.tr("gui.warn.recent_error") + root.last-error; color: #dc3730; font-size: 16px; }
@@ -162,297 +154,315 @@ export component AppWindow inherits Window {
 
             ScrollView {
                 VerticalLayout {
+                    padding: 16px;
                     alignment: start;
-                    spacing: 10px;
+                    spacing: root.operation-row-spacing;
 
                     Rectangle {
-                        border-radius: 10px;
-                        border-width: 1px;
-                        VerticalLayout {
-                            padding: 16px;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
                             spacing: 8px;
-
-                            Rectangle {
-                                min-height: 54px;
-                                max-height: 54px;
-                                HorizontalLayout {
-                                    spacing: 12px;
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 210px; preferred-width: 210px; max-width: 210px;
-                                        Text { text: root.tr("install.row.manager"); font-size: 16px; vertical-alignment: center; }
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 128px; preferred-width: 128px; max-width: 128px;
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        HorizontalLayout {
-                                            alignment: end;
-                                            spacing: 8px;
-                                            Button { height: 34px; width: 112px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-source-idx = 0; root.install-recommended(); } }
-                                            Button { height: 34px; width: 112px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.continuity-manual = false; root.xiaoai-manual = false; root.manager-manual = !root.manager-manual; } }
-                                            Button { height: 34px; width: 72px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.full-features && !root.downloading; clicked => { root.request-uninstall(0); } }
-                                            Rectangle { width: 20px; height: 20px; if root.downloading && root.manager-source-idx == 0: Spinner { indeterminate: true; } }
-                                        }
-                                    }
-                                }
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 132px; preferred-width: 132px; max-width: 132px;
+                                Text { text: root.tr("install.row.manager"); font-size: 16px; vertical-alignment: center; wrap: word-wrap; }
                             }
-
-                            if root.manager-manual: VerticalLayout {
-                                spacing: 6px;
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.manager-url-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
-                                    Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.manager-url-input != ""; clicked => { root.download-and-install-manager(root.manager-url-input); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.manager-path-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; clicked => { root.browse-manager-installer(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.manager-path-input != ""; clicked => { root.start-manager-install(root.manager-path-input); } }
-                                }
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 116px; preferred-width: 116px; max-width: 116px;
                             }
-
-                            Rectangle {
-                                min-height: 54px;
-                                max-height: 54px;
+                            VerticalLayout {
+                                alignment: center;
                                 HorizontalLayout {
-                                    spacing: 12px;
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 210px; preferred-width: 210px; max-width: 210px;
-                                        Text { text: root.tr("install.row.continuity"); font-size: 16px; vertical-alignment: center; }
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 128px; preferred-width: 128px; max-width: 128px;
-                                        RadioGroup {
-                                            min-width: 104px; preferred-width: 104px; max-width: 104px;
-                                            orientation: horizontal;
-                                            enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available;
-                                            RadioButton { text: "OS3"; checked: root.continuity-source-idx == 0; }
-                                            RadioButton { text: "OS4"; checked: root.continuity-source-idx == 1; }
-                                            selected(value) => { root.continuity-source-idx = value == "OS4" ? 1 : 0; }
-                                        }
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        HorizontalLayout {
-                                            alignment: end;
-                                            spacing: 8px;
-                                            Button { height: 34px; width: 112px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-source-idx = root.continuity-source-idx + 1; root.install-recommended(); } }
-                                            Button { height: 34px; width: 112px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-manual = false; root.xiaoai-manual = false; root.continuity-manual = !root.continuity-manual; } }
-                                            Button { height: 34px; width: 72px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.continuity-available && !root.downloading; clicked => { root.request-uninstall(1); } }
-                                            Rectangle { width: 20px; height: 20px; if root.downloading && root.manager-source-idx != 0: Spinner { indeterminate: true; } }
-                                        }
-                                    }
+                                    cross-axis-alignment: center;
+                                    alignment: end;
+                                    spacing: 8px;
+                                    Rectangle { width: 20px; height: 20px; if root.downloading && root.manager-source-idx == 0: Spinner { indeterminate: true; } }
+                                    Button { height: 34px; width: 96px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-source-idx = 0; root.install-recommended(); } }
+                                    Button { height: 34px; width: 96px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.continuity-manual = false; root.xiaoai-manual = false; root.manager-manual = !root.manager-manual; } }
+                                    Button { height: 34px; width: 64px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.full-features && !root.downloading; clicked => { root.request-uninstall(0); } }
                                 }
-                            }
-
-                            if root.continuity-manual: VerticalLayout {
-                                spacing: 6px;
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.continuity-url-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
-                                    Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.continuity-url-input != ""; clicked => { root.download-and-install-continuity(root.continuity-url-input); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.continuity-path-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; clicked => { root.browse-continuity-installer(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.continuity-path-input != ""; clicked => { root.start-continuity-install(root.continuity-path-input); } }
-                                }
-                            }
-
-                            Rectangle {
-                                min-height: 54px;
-                                max-height: 54px;
-                                HorizontalLayout {
-                                    spacing: 12px;
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 210px; preferred-width: 210px; max-width: 210px;
-                                        Text { text: root.tr("install.row.xiaoai"); font-size: 16px; vertical-alignment: center; }
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        min-width: 128px; preferred-width: 128px; max-width: 128px;
-                                    }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        HorizontalLayout {
-                                            alignment: end;
-                                            spacing: 8px;
-                                            Button { height: 34px; width: 112px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.xiaoai-busy && !root.xiaoai-available; clicked => { root.install-recommended-xiaoai(); } }
-                                            Button { height: 34px; width: 112px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.xiaoai-busy && !root.xiaoai-available; clicked => { root.manager-manual = false; root.continuity-manual = false; root.xiaoai-manual = !root.xiaoai-manual; } }
-                                            Button { height: 34px; width: 72px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy; clicked => { root.request-xiaoai-uninstall(); } }
-                                            Rectangle { width: 20px; height: 20px; if root.xiaoai-busy: Spinner { indeterminate: true; } }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if root.xiaoai-manual: VerticalLayout {
-                                spacing: 6px;
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.xiaoai-url-input; enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; placeholder-text: root.tr("install.download.placeholder"); }
-                                    Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-url-input != ""; clicked => { root.download-and-install-xiaoai(root.xiaoai-url-input); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    LineEdit { text <=> root.xiaoai-path-input; enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; placeholder-text: root.tr("install.file.placeholder"); }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; clicked => { root.browse-xiaoai-installer(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-path-input != ""; clicked => { root.start-xiaoai-install(root.xiaoai-path-input); } }
-                                }
-                            }
-
-                            if root.downloading: VerticalLayout {
-                                spacing: 6px;
-                                Rectangle {
-                                    height: 6px;
-                                    background: Palette.alternate-background;
-                                    Rectangle { width: parent.width * root.manager-progress; background: Palette.accent-background; }
-                                }
-                                Text { text: root.manager-progress-text; }
-                                Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.manager-download-active; clicked => { root.cancel-download(); } }
-                            }
-
-                            if root.xiaoai-busy: VerticalLayout {
-                                spacing: 6px;
-                                Rectangle {
-                                    height: 6px;
-                                    background: Palette.alternate-background;
-                                    Rectangle { width: parent.width * root.xiaoai-progress; background: Palette.accent-background; }
-                                }
-                                Text { text: root.xiaoai-progress-text; }
-                                Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.xiaoai-download-active; clicked => { root.cancel-xiaoai-download(); } }
                             }
                         }
                     }
 
+                    if root.manager-manual: VerticalLayout {
+                        spacing: 6px;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.manager-url-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
+                            Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.manager-url-input != ""; clicked => { root.download-and-install-manager(root.manager-url-input); } }
+                        }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.manager-path-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
+                            Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; clicked => { root.browse-manager-installer(); } }
+                            Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.manager-path-input != ""; clicked => { root.start-manager-install(root.manager-path-input); } }
+                        }
+                    }
+
                     Rectangle {
-                        border-radius: 10px;
-                        border-width: 1px;
-                        VerticalLayout {
-                            padding: 16px;
-                            spacing: 10px;
-                            Text { text: root.tr("section.patches"); font-weight: 700; font-size: 16px; }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.locale"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && !root.locale-active; clicked => { root.apply-locale(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && root.locale-active; clicked => { root.revert-locale(); } }
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 8px;
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 132px; preferred-width: 132px; max-width: 132px;
+                                Text { text: root.tr("install.row.continuity"); font-size: 16px; vertical-alignment: center; wrap: word-wrap; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 116px; preferred-width: 116px; max-width: 116px;
+                                RadioGroup {
+                                    min-width: 104px; preferred-width: 104px; max-width: 104px;
+                                    orientation: horizontal;
+                                    enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available;
+                                    RadioButton { text: "OS3"; checked: root.continuity-source-idx == 0; }
+                                    RadioButton { text: "OS4"; checked: root.continuity-source-idx == 1; }
+                                    selected(value) => { root.continuity-source-idx = value == "OS4" ? 1 : 0; }
                                 }
                             }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.device"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                            VerticalLayout {
+                                alignment: center;
                                 HorizontalLayout {
+                                    cross-axis-alignment: center;
                                     alignment: end;
-                                    spacing: 6px;
-                                    CheckBox { text: root.tr("hint.custom"); checked <=> root.custom-mode; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    if !root.custom-mode: ComboBox { model: root.model-presets; current-index <=> root.model-idx; width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    if root.custom-mode: LineEdit { text <=> root.custom-model-input; placeholder-text: root.tr("hint.model.code"); width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    Button {
-                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.device-active;
-                                        clicked => {
-                                            if root.custom-mode { root.apply-device(root.custom-model-input); }
-                                            else { root.apply-device(root.model-codes[root.model-idx]); }
-                                        }
-                                    }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.device-active; clicked => { root.revert-device(); } }
+                                    spacing: 8px;
+                                    Rectangle { width: 20px; height: 20px; if root.downloading && root.manager-source-idx != 0: Spinner { indeterminate: true; } }
+                                    Button { height: 34px; width: 96px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-source-idx = root.continuity-source-idx + 1; root.install-recommended(); } }
+                                    Button { height: 34px; width: 96px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-manual = false; root.xiaoai-manual = false; root.continuity-manual = !root.continuity-manual; } }
+                                    Button { height: 34px; width: 64px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.continuity-available && !root.downloading; clicked => { root.request-uninstall(1); } }
                                 }
                             }
+                        }
+                    }
 
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.camera"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                    if root.continuity-manual: VerticalLayout {
+                        spacing: 6px;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.continuity-url-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
+                            Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.continuity-url-input != ""; clicked => { root.download-and-install-continuity(root.continuity-url-input); } }
+                        }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.continuity-path-input; enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
+                            Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading; clicked => { root.browse-continuity-installer(); } }
+                            Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.full-features && !root.continuity-available && !root.downloading && root.continuity-path-input != ""; clicked => { root.start-continuity-install(root.continuity-path-input); } }
+                        }
+                    }
+
+                    Rectangle {
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 8px;
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 132px; preferred-width: 132px; max-width: 132px;
+                                Text { text: root.tr("install.row.xiaoai"); font-size: 16px; vertical-alignment: center; wrap: word-wrap; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                min-width: 116px; preferred-width: 116px; max-width: 116px;
+                            }
+                            VerticalLayout {
+                                alignment: center;
                                 HorizontalLayout {
+                                    cross-axis-alignment: center;
                                     alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.camera-active; clicked => { root.apply-camera(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.camera-active; clicked => { root.revert-camera(); } }
+                                    spacing: 8px;
+                                    Rectangle { width: 20px; height: 20px; if root.xiaoai-busy: Spinner { indeterminate: true; } }
+                                    Button { height: 34px; width: 96px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.xiaoai-busy && !root.xiaoai-available; clicked => { root.install-recommended-xiaoai(); } }
+                                    Button { height: 34px; width: 96px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.xiaoai-busy && !root.xiaoai-available; clicked => { root.manager-manual = false; root.continuity-manual = false; root.xiaoai-manual = !root.xiaoai-manual; } }
+                                    Button { height: 34px; width: 64px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy; clicked => { root.request-xiaoai-uninstall(); } }
                                 }
                             }
+                        }
+                    }
 
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.audio"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.wifi"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 1); clicked => { root.apply-audio-wifi(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.lan"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 2); clicked => { root.apply-audio-lan(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.audio-active; clicked => { root.revert-audio(); } }
+                    if root.xiaoai-manual: VerticalLayout {
+                        spacing: 6px;
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.xiaoai-url-input; enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; placeholder-text: root.tr("install.download.placeholder"); }
+                            Button { height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-url-input != ""; clicked => { root.download-and-install-xiaoai(root.xiaoai-url-input); } }
+                        }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            spacing: 6px;
+                            LineEdit { text <=> root.xiaoai-path-input; enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; placeholder-text: root.tr("install.file.placeholder"); }
+                            Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy; clicked => { root.browse-xiaoai-installer(); } }
+                            Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install"); enabled: root.controls-ready && !root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-path-input != ""; clicked => { root.start-xiaoai-install(root.xiaoai-path-input); } }
+                        }
+                    }
+
+                    if root.downloading: VerticalLayout {
+                        spacing: 6px;
+                        Rectangle {
+                            height: 6px;
+                            background: Palette.alternate-background;
+                            Rectangle { width: parent.width * root.manager-progress; background: Palette.accent-background; }
+                        }
+                        Text { text: root.manager-progress-text; }
+                        Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.manager-download-active; clicked => { root.cancel-download(); } }
+                    }
+
+                    if root.xiaoai-busy: VerticalLayout {
+                        spacing: 6px;
+                        Rectangle {
+                            height: 6px;
+                            background: Palette.alternate-background;
+                            Rectangle { width: parent.width * root.xiaoai-progress; background: Palette.accent-background; }
+                        }
+                        Text { text: root.xiaoai-progress-text; }
+                        Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.xiaoai-download-active; clicked => { root.cancel-xiaoai-download(); } }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.locale"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && !root.locale-active; clicked => { root.apply-locale(); } }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && root.locale-active; clicked => { root.revert-locale(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.device"); vertical-alignment: center; min-width: 132px; preferred-width: 132px; max-width: 132px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            CheckBox { text: root.tr("hint.custom"); checked <=> root.custom-mode; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                            if !root.custom-mode: ComboBox { model: root.model-presets; current-index <=> root.model-idx; min-width: 180px; preferred-width: 320px; max-width: 320px; horizontal-stretch: 1; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                            if root.custom-mode: LineEdit { text <=> root.custom-model-input; placeholder-text: root.tr("hint.model.code"); min-width: 180px; preferred-width: 320px; max-width: 320px; horizontal-stretch: 1; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                            Button {
+                                height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.device-active;
+                                clicked => {
+                                    if root.custom-mode { root.apply-device(root.custom-model-input); }
+                                    else { root.apply-device(root.model-codes[root.model-idx]); }
                                 }
                             }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.device-active; clicked => { root.revert-device(); } }
+                        }
+                    }
 
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.xiaoai"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && !root.xiaoai-patch-active; clicked => { root.apply-xiaoai(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-patch-active; clicked => { root.revert-xiaoai(); } }
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.camera"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.camera-active; clicked => { root.apply-camera(); } }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.camera-active; clicked => { root.revert-camera(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.audio"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.wifi"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 1); clicked => { root.apply-audio-wifi(); } }
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.lan"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 2); clicked => { root.apply-audio-lan(); } }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.audio-active; clicked => { root.revert-audio(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.xiaoai"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && !root.xiaoai-patch-active; clicked => { root.apply-xiaoai(); } }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-patch-active; clicked => { root.revert-xiaoai(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.dual-nic"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button { height: 34px; width: 76px; text: root.tr("btn.diagnose"); enabled: root.controls-ready && root.full-features; clicked => { root.diagnose-dual-nic(); } }
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.fix"); enabled: root.controls-ready && root.full-features && root.dual-nic-state == 2; clicked => { root.fix-dual-nic(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.smbios"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Button {
+                                height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.smbios-active;
+                                clicked => {
+                                    if root.custom-mode { root.apply-smbios(root.custom-model-input); }
+                                    else { root.apply-smbios(root.model-codes[root.model-idx]); }
                                 }
                             }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.smbios-active; clicked => { root.revert-smbios(); } }
+                        }
+                    }
 
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.dual-nic"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.diagnose"); enabled: root.controls-ready && root.full-features; clicked => { root.diagnose-dual-nic(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.fix"); enabled: root.controls-ready && root.full-features && root.dual-nic-state == 2; clicked => { root.fix-dual-nic(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.smbios"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button {
-                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.smbios-active;
-                                        clicked => {
-                                            if root.custom-mode { root.apply-smbios(root.custom-model-input); }
-                                            else { root.apply-smbios(root.model-codes[root.model-idx]); }
-                                        }
-                                    }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.smbios-active; clicked => { root.revert-smbios(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.share-menu"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 1; clicked => { root.apply-xiaomi-share-menu(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 0; clicked => { root.revert-xiaomi-share-menu(); } }
-                                    if root.share-menu-busy: Spinner { indeterminate: true; }
-                                }
-                            }
+                    HorizontalLayout {
+                        cross-axis-alignment: center;
+                        min-height: root.operation-row-height;
+                        max-height: root.operation-row-height;
+                        spacing: 8px;
+                        Text { text: root.tr("patch.share-menu"); vertical-alignment: center; min-width: 132px; preferred-width: 220px; max-width: 220px; horizontal-stretch: 0; font-size: 16px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            cross-axis-alignment: center;
+                            alignment: end;
+                            spacing: 8px;
+                            Rectangle { width: 20px; height: 20px; if root.share-menu-busy: Spinner { indeterminate: true; } }
+                            Button { height: 34px; width: 76px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 1; clicked => { root.apply-xiaomi-share-menu(); } }
+                            Button { height: 34px; width: 76px; text: root.tr("btn.revert"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 0; clicked => { root.revert-xiaomi-share-menu(); } }
                         }
                     }
                 }

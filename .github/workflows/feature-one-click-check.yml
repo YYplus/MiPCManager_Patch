@@ -52,14 +52,14 @@ jobs:
         run: cargo build --release --bin MiPCM_GUI
 
       - name: Stage preview executable
-        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.gui_preview)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target\release\MiPCM_GUI.exe dist\MiPCM_Patch_UI_Preview.exe
 
       - name: Upload GUI preview
-        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.gui_preview)
         uses: actions/upload-artifact@v4
         with:
           name: MiPCM-Patch-Unified-Preview
