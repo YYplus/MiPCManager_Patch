@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - feature/one-click-install
+  pull_request:
+    branches:
+      - main
+      - tmp/ui-preview-build-base
   workflow_dispatch:
 
 permissions:
