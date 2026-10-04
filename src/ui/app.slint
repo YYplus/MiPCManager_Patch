@@ -6,7 +6,7 @@ import {
     Spinner,
     ScrollView,
     CheckBox,
-    RadioButton,
+    RadioGroup,
     Palette,
 } from "std-widgets.slint";
 
@@ -332,22 +332,21 @@ export component AppWindow inherits Window {
                                         vertical-alignment: center;
                                         min-width: 210px;
                                     }
-                                    HorizontalLayout {
+                                    RadioGroup {
                                         min-width: 150px;
                                         preferred-width: 170px;
-                                        alignment: center;
-                                        spacing: 4px;
+                                        orientation: horizontal;
+                                        enabled: !root.downloading && !root.full-features && !root.continuity-available;
                                         RadioButton {
                                             text: "OS3";
                                             checked: root.continuity-source-idx == 0;
-                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                            clicked => { root.continuity-source-idx = 0; }
                                         }
                                         RadioButton {
                                             text: "OS4";
                                             checked: root.continuity-source-idx == 1;
-                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                            clicked => { root.continuity-source-idx = 1; }
+                                        }
+                                        selected(value) => {
+                                            root.continuity-source-idx = value == "OS4" ? 1 : 0;
                                         }
                                     }
                                     HorizontalLayout {
