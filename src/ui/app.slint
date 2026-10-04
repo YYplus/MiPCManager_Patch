@@ -6,6 +6,7 @@ import {
     Spinner,
     ScrollView,
     CheckBox,
+    RadioButton,
     Palette,
 } from "std-widgets.slint";
 
@@ -45,6 +46,7 @@ export component AppWindow inherits Window {
     in-out property <string> xiaoai-progress-text;
     in-out property <bool> xiaoai-download-active: false;
     in-out property <bool> show-confirm: false;
+    in-out property <bool> confirm-xiaoai: false;
     in-out property <string> confirm-desc;
     in-out property <string> manager-url-input;
     in-out property <string> manager-path-input;
@@ -91,6 +93,7 @@ export component AppWindow inherits Window {
     callback start-xiaoai-install(string);
     callback uninstall-msix();
     callback request-uninstall();
+    callback request-xiaoai-uninstall();
     callback confirm-uninstall();
     callback cancel-uninstall();
     callback clear-log();
@@ -260,36 +263,44 @@ export component AppWindow inherits Window {
                         border-width: 1px;
                         VerticalLayout {
                             padding: 16px;
-                            spacing: 10px;
+                            spacing: 8px;
 
-                            HorizontalLayout {
-                                spacing: 10px;
-                                Text { text: root.tr("install.source.manager"); font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 260px; }
+                            Rectangle {
+                                min-height: 54px;
                                 HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button {
-                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
-                                        enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => { root.manager-source-idx = 0; root.install-recommended(); }
+                                    spacing: 12px;
+                                    Text {
+                                        text: root.tr("install.row.manager");
+                                        font-size: 16px;
+                                        vertical-alignment: center;
+                                        min-width: 210px;
                                     }
-                                    Button {
-                                        height: 30px; width: 110px; text: root.manager-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
-                                        enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => { root.continuity-manual = false; root.manager-manual = !root.manager-manual; }
+                                    HorizontalLayout { min-width: 150px; preferred-width: 170px; }
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 8px;
+                                        Button {
+                                            height: 34px; width: 112px; primary: true; text: root.tr("install.one-click");
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.manager-source-idx = 0; root.install-recommended(); }
+                                        }
+                                        Button {
+                                            height: 34px; width: 112px; text: root.manager-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.continuity-manual = false; root.xiaoai-manual = false; root.manager-manual = !root.manager-manual; }
+                                        }
+                                        Button {
+                                            height: 34px; width: 72px; text: root.tr("section.uninstall");
+                                            enabled: root.full-features && !root.downloading;
+                                            clicked => { root.request-uninstall(); }
+                                        }
+                                        if root.downloading && root.manager-source-idx == 0: Spinner { indeterminate: true; }
                                     }
-                                    Button {
-                                        height: 30px; width: 80px; text: root.tr("section.uninstall");
-                                        enabled: root.full-features && !root.downloading;
-                                        clicked => { root.request-uninstall(); }
-                                    }
-                                    if root.downloading && root.manager-source-idx == 0: Spinner { indeterminate: true; }
                                 }
                             }
 
                             if root.manager-manual: VerticalLayout {
                                 spacing: 6px;
-                                Text { text: root.tr("install.requirement.installer"); wrap: word-wrap; }
                                 HorizontalLayout {
                                     spacing: 6px;
                                     LineEdit { text <=> root.manager-url-input; enabled: !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
@@ -311,39 +322,55 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            HorizontalLayout {
-                                spacing: 10px;
-                                Text { text: root.tr("install.kind.continuity"); font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 180px; }
-                                ComboBox {
-                                    model: ["OS3", "OS4"];
-                                    current-index <=> root.continuity-source-idx;
-                                    width: 120px;
-                                    enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                }
+                            Rectangle {
+                                min-height: 54px;
                                 HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button {
-                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
-                                        enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => { root.manager-source-idx = root.continuity-source-idx + 1; root.install-recommended(); }
+                                    spacing: 12px;
+                                    Text {
+                                        text: root.tr("install.row.continuity");
+                                        font-size: 16px;
+                                        vertical-alignment: center;
+                                        min-width: 210px;
                                     }
-                                    Button {
-                                        height: 30px; width: 110px; text: root.continuity-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
-                                        enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => { root.manager-manual = false; root.continuity-manual = !root.continuity-manual; }
+                                    HorizontalLayout {
+                                        min-width: 150px;
+                                        preferred-width: 170px;
+                                        alignment: center;
+                                        spacing: 4px;
+                                        RadioButton {
+                                            text: "OS3";
+                                            checked: root.continuity-source-idx == 0;
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.continuity-source-idx = 0; }
+                                        }
+                                        RadioButton {
+                                            text: "OS4";
+                                            checked: root.continuity-source-idx == 1;
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.continuity-source-idx = 1; }
+                                        }
                                     }
-                                    Button {
-                                        height: 30px; width: 80px; text: root.tr("section.uninstall");
-                                        enabled: root.continuity-available && !root.downloading;
-                                        clicked => { root.request-uninstall(); }
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 8px;
+                                        Button {
+                                            height: 34px; width: 112px; primary: true; text: root.tr("install.one-click");
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.manager-source-idx = root.continuity-source-idx + 1; root.install-recommended(); }
+                                        }
+                                        Button {
+                                            height: 34px; width: 112px; text: root.continuity-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                            enabled: !root.downloading && !root.full-features && !root.continuity-available;
+                                            clicked => { root.manager-manual = false; root.xiaoai-manual = false; root.continuity-manual = !root.continuity-manual; }
+                                        }
+                                        Button {
+                                            height: 34px; width: 72px; text: root.tr("section.uninstall");
+                                            enabled: root.continuity-available && !root.downloading;
+                                            clicked => { root.request-uninstall(); }
+                                        }
+                                        if root.downloading && root.manager-source-idx != 0: Spinner { indeterminate: true; }
                                     }
-                                    if root.downloading && root.manager-source-idx != 0: Spinner { indeterminate: true; }
                                 }
-                            }
-                            Text {
-                                text: root.continuity-source-idx == 0 ? root.tr("install.requirement.continuity") : root.tr("install.requirement.hyperconnect-beta");
-                                wrap: word-wrap;
                             }
 
                             if root.continuity-manual: VerticalLayout {
@@ -369,26 +396,39 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            HorizontalLayout {
-                                spacing: 10px;
-                                Text { text: root.xiaoai-source; font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 260px; }
+                            Rectangle {
+                                min-height: 54px;
                                 HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button {
-                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
-                                        enabled: !root.xiaoai-busy && !root.xiaoai-available;
-                                        clicked => { root.install-recommended-xiaoai(); }
+                                    spacing: 12px;
+                                    Text {
+                                        text: root.tr("install.row.xiaoai");
+                                        font-size: 16px;
+                                        vertical-alignment: center;
+                                        min-width: 210px;
                                     }
-                                    Button {
-                                        height: 30px; width: 110px; text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
-                                        enabled: !root.xiaoai-busy && !root.xiaoai-available;
-                                        clicked => { root.xiaoai-manual = !root.xiaoai-manual; }
+                                    HorizontalLayout { min-width: 150px; preferred-width: 170px; }
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 8px;
+                                        Button {
+                                            height: 34px; width: 112px; primary: true; text: root.tr("install.one-click");
+                                            enabled: !root.xiaoai-busy && !root.xiaoai-available;
+                                            clicked => { root.install-recommended-xiaoai(); }
+                                        }
+                                        Button {
+                                            height: 34px; width: 112px; text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                            enabled: !root.xiaoai-busy && !root.xiaoai-available;
+                                            clicked => { root.manager-manual = false; root.continuity-manual = false; root.xiaoai-manual = !root.xiaoai-manual; }
+                                        }
+                                        Button {
+                                            height: 34px; width: 72px; text: root.tr("section.uninstall");
+                                            enabled: root.xiaoai-available && !root.xiaoai-busy;
+                                            clicked => { root.request-xiaoai-uninstall(); }
+                                        }
+                                        if root.xiaoai-busy: Spinner { indeterminate: true; }
                                     }
-                                    if root.xiaoai-busy: Spinner { indeterminate: true; }
                                 }
                             }
-                            Text { text: root.tr("install.xiaoai.note"); wrap: word-wrap; }
 
                             if root.xiaoai-manual: VerticalLayout {
                                 spacing: 6px;
@@ -433,11 +473,6 @@ export component AppWindow inherits Window {
                                 }
                                 Text { text: root.xiaoai-progress-text; }
                                 Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.xiaoai-download-active; clicked => { root.cancel-xiaoai-download(); } }
-                            }
-
-                            HorizontalLayout {
-                                alignment: end;
-                                Button { height: 30px; text: root.tr("gui.uninstall.msix"); clicked => { root.uninstall-msix(); } }
                             }
                         }
                     }
