@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
-use anyhow::{Result, bail};
-use mipcmanager_patch::{elevate, i18n, install, ops, patches::device as ds};
+use anyhow::{Context, Result, bail};
+use mipcmanager_patch::{elevate, i18n, install, ops, patches::device as ds, uninstall};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 #[cfg(windows)]
 use std::cell::RefCell;
@@ -28,13 +28,17 @@ fn main() {
 
     app.on_tr(move |key: SharedString| -> SharedString {
         let key = key.to_string();
-        if key == "install.one-click" {
-            return match lang {
-                i18n::Lang::Zh => "一键安装".into(),
-                i18n::Lang::En => "One-click Install".into(),
-            };
+        match (key.as_str(), lang) {
+            ("install.one-click", i18n::Lang::Zh) => "一键安装".into(),
+            ("install.one-click", i18n::Lang::En) => "One-click Install".into(),
+            ("install.row.manager", i18n::Lang::Zh) => "小米电脑管家".into(),
+            ("install.row.manager", i18n::Lang::En) => "MiPCManager".into(),
+            ("install.row.continuity", i18n::Lang::Zh) => "小米互联".into(),
+            ("install.row.continuity", i18n::Lang::En) => "Xiaomi Interconnectivity".into(),
+            ("install.row.xiaoai", i18n::Lang::Zh) => "超级小爱".into(),
+            ("install.row.xiaoai", i18n::Lang::En) => "Super XiaoAI".into(),
+            _ => i18n::tr(&key, lang).into(),
         }
-        i18n::tr(&key, lang).into()
     });
 
     let sources = ops::RecommendedInstaller::MANAGER_VARIANTS;
@@ -130,6 +134,36 @@ fn ensure_manual_url_kind(
 ) -> Result<()> {
     let filename = install::pc_manager_installer::download_filename(url)?;
     ensure_manual_installer_kind(Path::new(&filename), expected)
+}
+
+fn xiaoai_uninstall_description() -> Result<String> {
+    let root = install::find_xiaoai_root().context("未检测到已安装的超级小爱")?;
+    Ok(format!(
+        "将卸载 超级小爱\n\n安装目录：{}\n\n此操作不可逆！",
+        root.display()
+    ))
+}
+
+fn uninstall_xiaoai() -> Result<Vec<String>> {
+    let root = install::find_xiaoai_root().context("未检测到已安装的超级小爱")?;
+    let version = install::latest_version_dir(&root)?;
+    let uninstall_exe = version.join("uninstall.exe");
+    let mut log = vec![format!("开始卸载超级小爱：{}", root.display())];
+    log.push(format!("  正在运行卸载程序：{}", uninstall_exe.display()));
+    let removed = uninstall::run_product_uninstaller(&uninstall_exe)?;
+    if removed {
+        log.push("  ✓ 主程序卸载完成".to_string());
+        if uninstall::remove_dir_if_exists(&root)? {
+            log.push(format!("  ✓ 已清理 {}", root.display()));
+        }
+    } else {
+        log.push(format!(
+            "  ⚠ 卸载程序未删除自身，卸载可能未完成：{}",
+            uninstall_exe.display()
+        ));
+    }
+    log.push("✓ 超级小爱卸载流程完成".to_string());
+    Ok(log)
 }
 
 #[cfg(windows)]
@@ -362,6 +396,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let app = app_weak.unwrap();
             match ops::uninstall_product_description() {
                 Ok(d) => {
+                    app.set_confirm_xiaoai(false);
                     app.set_confirm_desc(d.into());
                     app.set_show_confirm(true);
                 }
@@ -369,13 +404,33 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             }
         }
     });
+    app.on_request_xiaoai_uninstall({
+        let app_weak = app_weak.clone();
+        move || {
+            let app = app_weak.unwrap();
+            match xiaoai_uninstall_description() {
+                Ok(d) => {
+                    app.set_confirm_xiaoai(true);
+                    app.set_confirm_desc(d.into());
+                    app.set_show_confirm(true);
+                }
+                Err(e) => append_log(&app, i18n::tr("install.row.xiaoai", lang), Err(e)),
+            }
+        }
+    });
     app.on_confirm_uninstall({
         let app_weak = app_weak.clone();
         move || {
             let app = app_weak.unwrap();
+            let xiaoai = app.get_confirm_xiaoai();
             app.set_show_confirm(false);
+            app.set_confirm_xiaoai(false);
             app.set_confirm_desc("".into());
-            run_patch(&app, i18n::tr("gui.op.uninstall.product", lang), ops::uninstall_product);
+            if xiaoai {
+                run_patch(&app, i18n::tr("install.row.xiaoai", lang), uninstall_xiaoai);
+            } else {
+                run_patch(&app, i18n::tr("gui.op.uninstall.product", lang), ops::uninstall_product);
+            }
         }
     });
     app.on_cancel_uninstall({
@@ -383,6 +438,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         move || {
             let app = app_weak.unwrap();
             app.set_show_confirm(false);
+            app.set_confirm_xiaoai(false);
             app.set_confirm_desc("".into());
         }
     });
