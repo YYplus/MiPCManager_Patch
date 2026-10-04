@@ -159,7 +159,7 @@ CLI 使用 `install --recommended [manager|continuity|hyperconnect-beta]`，省�
 
 **URL 下载**：`infra::download` 解压并校验内嵌 aria2，仅在下载期间启动隐藏窗口的子进程，结束后退出并移除下载器临时目录。最多八路连接；进度从本次子进程的 loopback JSON-RPC 读取，不以文件大小估算。会话使用随机令牌，不读取用户 aria2 配置。URL 与路径作为 JSON 数据传入，不拼接到 PowerShell 或 shell 命令中。
 
-下载缓存按 URL 及固定 SHA-256 隔离，位于 `%TEMP%\MiPCManager_Patch\downloads`，可由 Windows 临时文件清理；自动清理取决于存储感知设置。下载先写 `.part`，aria2 的 `.aria2` 控制文件与来源 `.download.meta` 支持续传，完成后保存为 `.exe`。缓存被清理后需要重新下载。跨进程文件锁防止重复下载同一目标，保存时不覆盖同名文件。内置来源的地址和 SHA-256 集中维护于 `install::sources`；通过校验的缓存可复用，校验失败不会启动。HyperConnect 内测地址会由官方滚动更新，更新后的安装包需要同步更新内置 SHA-256。手动地址没有预置哈希，其完整同名文件保留并报错，可转为本地安装。取消下载不等于取消已经启动的安装器。
+下载缓存按 URL 及固定 SHA-256 隔离，位于 `%TEMP%\MiPCManager_Patch\downloads` 下的来源隔离子目录，可由 Windows 临时文件清理；自动清理取决于存储感知设置。下载先写 `.part`，aria2 的 `.aria2` 控制文件与来源 `.download.meta` 支持续传，完成后保存为 `.exe`。缓存被清理后需要重新下载。跨进程文件锁防止重复下载同一目标，保存时不覆盖同名文件。内置来源的地址和 SHA-256 集中维护于 `install::sources`；通过校验的缓存可在仍存在时复用，校验失败不会启动。HyperConnect 内测地址会由官方滚动更新，更新后的安装包需要同步更新内置 SHA-256。手动地址没有预置哈希，其完整同名文件保留并报错，可转为本地安装。取消下载不等于取消已经启动的安装器。
 
 **命令行选项**：
 - `--recommended [manager|continuity|hyperconnect-beta]`：选择内置电脑管家、互联 Windows 版或内测版，默认电脑管家

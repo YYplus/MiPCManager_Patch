@@ -2,7 +2,7 @@
 
 use crate::i18n::{self, Lang};
 use crate::infra::download::{self, DownloadControl};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -88,7 +88,6 @@ pub fn checksum_for_url(url: &str) -> Option<&'static str> {
 
 /// 下载缓存放在 Windows 临时目录，按来源及校验值隔离，便于系统清理。
 pub fn download_dir(url: &str) -> Result<PathBuf> {
-    let base = std::env::var_os("TEMP").context("无法确定 Windows 临时下载缓存目录")?;
     let identity = format!(
         "{:x}",
         Sha256::digest(format!(
@@ -96,7 +95,7 @@ pub fn download_dir(url: &str) -> Result<PathBuf> {
             checksum_for_url(url).unwrap_or_default()
         ))
     );
-    Ok(PathBuf::from(base)
+    Ok(std::env::temp_dir()
         .join("MiPCManager_Patch")
         .join("downloads")
         .join(identity))
