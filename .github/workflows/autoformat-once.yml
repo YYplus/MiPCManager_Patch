@@ -1,0 +1,35 @@
+name: One-shot rustfmt
+
+on:
+  push:
+    branches:
+      - feature/one-click-install
+
+permissions:
+  contents: write
+
+jobs:
+  rustfmt:
+    if: github.event.head_commit.message != 'style: apply rustfmt'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/one-click-install
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format Rust sources
+        run: cargo fmt --all
+      - name: Commit formatting
+        shell: pwsh
+        run: |
+          if (-not (git status --porcelain)) {
+            Write-Host 'No formatting changes.'
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- '*.rs'
+          git commit -m 'style: apply rustfmt'
+          git push origin HEAD:feature/one-click-install
