@@ -27,8 +27,7 @@ pub fn patch_bytes(data: &mut [u8]) -> Result<PatchOutcome> {
     let orig_sig = [ANCHOR_GEO, ORIG_NAME].concat();
     let patched_sig = [ANCHOR_GEO, PATCHED_NAME].concat();
 
-    if infra::bytes::find_bytes(data, &orig_sig).is_some() {
-        let pos = infra::bytes::find_bytes(data, &orig_sig).unwrap();
+    if let Some(pos) = infra::bytes::find_bytes(data, &orig_sig) {
         let name_at = pos + ANCHOR_GEO.len();
         data[name_at..name_at + PATCHED_NAME.len()].copy_from_slice(PATCHED_NAME);
         return Ok(PatchOutcome::Patched);
@@ -37,6 +36,34 @@ pub fn patch_bytes(data: &mut [u8]) -> Result<PatchOutcome> {
         return Ok(PatchOutcome::AlreadyPatched);
     }
     bail!("未在 {TARGET_DLL} 中找到 `Geo\\Name` 特征，可能版本结构已变更");
+}
+
+/// 只撤销地区伪装对应的 `Geo\\XCN -> Geo\\Name` 字节，不整文件回滚。
+///
+/// `micont_rtm.dll` 还可能同时承载 Lyra SMBIOS 补丁，因此这里不能再直接恢复
+/// `.orig.bak`，否则会把另一个独立补丁一并清掉。
+fn revert_bytes(data: &mut [u8]) -> Result<bool> {
+    let orig_sig = [ANCHOR_GEO, ORIG_NAME].concat();
+    let patched_sig = [ANCHOR_GEO, PATCHED_NAME].concat();
+
+    if let Some(pos) = infra::bytes::find_bytes(data, &patched_sig) {
+        let name_at = pos + ANCHOR_GEO.len();
+        data[name_at..name_at + ORIG_NAME.len()].copy_from_slice(ORIG_NAME);
+        return Ok(true);
+    }
+    if infra::bytes::find_bytes(data, &orig_sig).is_some() {
+        return Ok(false);
+    }
+    bail!("未在 {TARGET_DLL} 中找到 `Geo\\XCN` / `Geo\\Name` 特征，可能版本结构已变更");
+}
+
+/// 当前 DLL 是否真正处于地区伪装字节状态。
+pub fn is_patched(dll_path: &Path) -> bool {
+    let Ok(data) = std::fs::read(dll_path) else {
+        return false;
+    };
+    let patched_sig = [ANCHOR_GEO, PATCHED_NAME].concat();
+    infra::bytes::find_bytes(&data, &patched_sig).is_some()
 }
 
 /// 对安装目录中的 DLL 应用补丁，并写入注册表伪装值。
@@ -53,9 +80,12 @@ pub fn apply(dll_path: &Path, region: &str, write_registry: bool) -> Result<Patc
     Ok(outcome)
 }
 
-/// 还原 DLL 并移除注册表伪装值。
+/// 仅还原地区伪装自身的字节并移除注册表伪装值；保留同一 DLL 中的其他补丁。
 pub fn revert(dll_path: &Path, remove_registry: bool) -> Result<()> {
-    install::restore_backup(dll_path)?;
+    let mut data = std::fs::read(dll_path)?;
+    if revert_bytes(&mut data)? {
+        install::write_file_atomic(dll_path, &data)?;
+    }
     if remove_registry {
         remove_registry_value()?;
     }
@@ -75,22 +105,39 @@ fn remove_registry_value() -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn patch_then_idempotent() {
-        // 构造：前缀 + Geo\0 + Name\0\0 + 后缀
+    fn fixture() -> Vec<u8> {
         let mut buf = vec![0xAB; 4];
         buf.extend_from_slice(ANCHOR_GEO);
         buf.extend_from_slice(ORIG_NAME);
         buf.extend_from_slice(&[0xCD; 4]);
+        buf
+    }
+
+    #[test]
+    fn patch_then_idempotent() {
+        let mut buf = fixture();
         let snapshot_len = buf.len();
 
         assert_eq!(patch_bytes(&mut buf).unwrap(), PatchOutcome::Patched);
         assert_eq!(buf.len(), snapshot_len, "补丁必须等长，不得移位");
-        // Name 已变为 XCN
         let name_at = 4 + ANCHOR_GEO.len();
         assert_eq!(&buf[name_at..name_at + PATCHED_NAME.len()], PATCHED_NAME);
-        // 再次执行应识别为已打补丁
-        assert_eq!(patch_bytes(&mut buf).unwrap(), PatchOutcome::AlreadyPatched);
+        assert_eq!(
+            patch_bytes(&mut buf).unwrap(),
+            PatchOutcome::AlreadyPatched
+        );
+    }
+
+    #[test]
+    fn revert_only_changes_locale_signature() {
+        let mut buf = fixture();
+        let marker = b"other-patch-data";
+        buf.extend_from_slice(marker);
+        patch_bytes(&mut buf).unwrap();
+
+        assert!(revert_bytes(&mut buf).unwrap());
+        assert!(buf.ends_with(marker));
+        assert!(!revert_bytes(&mut buf).unwrap());
     }
 
     /// 用未入库的厂商 DLL 验证真实 PcContinuity 版本。
@@ -120,5 +167,7 @@ mod tests {
             patch_bytes(&mut patched).unwrap(),
             PatchOutcome::AlreadyPatched
         );
+        assert!(revert_bytes(&mut patched).unwrap());
+        assert_eq!(patched, original);
     }
 }
