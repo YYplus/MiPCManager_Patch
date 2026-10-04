@@ -7,10 +7,12 @@
 //! 原地改写为 `E8 rel32 + NOP`（6 字节不变），直接跳转到 `.mipatch` 节中的
 //! trampoline；trampoline 通过原始 IAT 调用原函数并替换 SMBIOS buffer 字段。
 //!
-//! 与 LocaleSpoof 均修改 `micont_rtm.dll`，互不冲突。
+//! 与 LocaleSpoof 均修改 `micont_rtm.dll`。二者共享原始备份，但还原时会保留
+//! 另一项补丁的独立状态。
 
 use super::{smbios, x64_trampoline};
 use crate::infra::pe::PeImage;
+use crate::patches::locale;
 use crate::install;
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -28,6 +30,10 @@ pub enum PatchOutcome {
 }
 
 pub fn apply(dll_path: &Path, model: Option<&str>) -> Result<PatchOutcome> {
+    if is_patched(dll_path) {
+        return Ok(PatchOutcome::AlreadyPatched);
+    }
+
     let model_code = model.unwrap_or(DEFAULT_MODEL);
 
     let smbios_raw = read_system_smbios()?;
@@ -54,13 +60,9 @@ pub fn apply(dll_path: &Path, model: Option<&str>) -> Result<PatchOutcome> {
         .find_call_to_iat(iat_rva)
         .context("未找到指向 GetSystemFirmwareTable IAT 的 call 指令")?;
 
-    // 构建 trampoline；IAT 引用 disp32 的字节偏移在 iat_disp_off
     let tc = x64_trampoline::build_trampoline(iat_rva, &entries);
-
-    // 追加 .mipatch 节
     let trampoline_rva = pe.append_section(SECTION_NAME, &tc.bytes, SECTION_CHARACTERISTICS)?;
 
-    // 原地修正 IAT 引用：disp = iat_rva - (actual_rva + iat_disp_off + 7)
     let sections = pe.sections();
     let sec = sections.last().context("append_section 未产生节")?;
     let raw_start = sec.raw_pointer as usize;
@@ -69,8 +71,6 @@ pub fn apply(dll_path: &Path, model: Option<&str>) -> Result<PatchOutcome> {
     pe.data[raw_start + tc.iat_disp_byte_offset..raw_start + tc.iat_disp_byte_offset + 4]
         .copy_from_slice(&correct_disp.to_le_bytes());
 
-    // 改写 call 指令：E8 rel32 + NOP
-    // E8 disp32 = trampoline_rva - (call_rva + 5)
     let call_disp = (trampoline_rva as i64).wrapping_sub(call_rva.wrapping_add(5) as i64) as i32;
     pe.data[call_off] = 0xE8;
     pe.data[call_off + 1..call_off + 5].copy_from_slice(&call_disp.to_le_bytes());
@@ -82,12 +82,41 @@ pub fn apply(dll_path: &Path, model: Option<&str>) -> Result<PatchOutcome> {
     Ok(PatchOutcome::Patched)
 }
 
+/// 还原 SMBIOS 补丁，同时保留同一 DLL 中已经启用的地区伪装。
 pub fn revert(dll_path: &Path) -> Result<()> {
-    install::restore_backup(dll_path)
+    let locale_was_patched = locale::is_patched(dll_path);
+    install::restore_backup(dll_path)?;
+    if locale_was_patched {
+        let mut data = std::fs::read(dll_path)?;
+        if locale::patch_bytes(&mut data)? == locale::PatchOutcome::Patched {
+            install::write_file_atomic(dll_path, &data)?;
+        }
+    }
+    Ok(())
 }
 
+/// 判断当前文件是否真正含 SMBIOS call 重定向，而不是仅凭共享 `.orig.bak` 推断。
+///
+/// 用原始备份定位 `GetSystemFirmwareTable` 的原 call 偏移，再检查当前文件同一位置
+/// 是否已变为本补丁写入的 `E8 rel32 + NOP`。这样地区伪装单独创建备份时不会误报。
 pub fn is_patched(dll_path: &Path) -> bool {
-    install::backup_path(dll_path).exists()
+    let backup = install::backup_path(dll_path);
+    let (Ok(current), Ok(original)) = (std::fs::read(dll_path), std::fs::read(backup)) else {
+        return false;
+    };
+    let Ok(original_pe) = PeImage::parse(original) else {
+        return false;
+    };
+    let Ok((_, iat_rva, _)) = original_pe.find_iat_entry("kernel32", "GetSystemFirmwareTable")
+    else {
+        return false;
+    };
+    let Ok((call_off, _)) = original_pe.find_call_to_iat(iat_rva) else {
+        return false;
+    };
+    current.len() > original_pe.data.len()
+        && current.get(call_off) == Some(&0xE8)
+        && current.get(call_off + 5) == Some(&0x90)
 }
 
 // ── helpers ────────────────────────────────────────────────
