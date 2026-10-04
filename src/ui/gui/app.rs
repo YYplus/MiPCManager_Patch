@@ -1,12 +1,11 @@
 #![windows_subsystem = "windows"]
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use mipcmanager_patch::{
     elevate,
     experimental::smbios_spoof,
     i18n, install, ops,
-    patches::{ai, audio, camera, device as ds, locale, xiaomi_share_menu},
-    uninstall,
+    patches::{ai, audio, camera, device as ds, locale},
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 #[cfg(windows)]
@@ -33,20 +32,7 @@ fn main() {
     let lang = i18n::detect_lang();
     let app = AppWindow::new().unwrap();
 
-    app.on_tr(move |key: SharedString| -> SharedString {
-        let key = key.to_string();
-        match (key.as_str(), lang) {
-            ("install.one-click", i18n::Lang::Zh) => "一键安装".into(),
-            ("install.one-click", i18n::Lang::En) => "One-click Install".into(),
-            ("install.row.manager", i18n::Lang::Zh) => "小米电脑管家".into(),
-            ("install.row.manager", i18n::Lang::En) => "MiPCManager".into(),
-            ("install.row.continuity", i18n::Lang::Zh) => "小米互联".into(),
-            ("install.row.continuity", i18n::Lang::En) => "Xiaomi Interconnectivity".into(),
-            ("install.row.xiaoai", i18n::Lang::Zh) => "超级小爱".into(),
-            ("install.row.xiaoai", i18n::Lang::En) => "Super XiaoAI".into(),
-            _ => i18n::tr(&key, lang).into(),
-        }
-    });
+    app.on_tr(move |key: SharedString| -> SharedString { i18n::tr(key.as_str(), lang).into() });
 
     let sources = ops::RecommendedInstaller::MANAGER_VARIANTS;
     app.set_manager_sources(ModelRc::new(VecModel::from(
@@ -75,17 +61,18 @@ fn main() {
 
     refresh(&app);
     setup_callbacks(&app, lang);
+    let timer = slint::Timer::default();
+    let weak = app.as_weak();
+    timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_secs(5),
+        move || {
+            if let Some(app) = weak.upgrade() {
+                refresh(&app);
+            }
+        },
+    );
     app.run().unwrap();
-}
-
-fn current_locale_dll() -> Option<PathBuf> {
-    if let Some(root) = install::find_install_root() {
-        let version = install::latest_version_dir(&root).ok()?;
-        return Some(version.join(locale::TARGET_DLL));
-    }
-    let root = install::find_pc_continuity_root()?;
-    let version = install::latest_version_dir(&root).ok()?;
-    Some(install::runtime_native_dir(&version).join(locale::TARGET_DLL))
 }
 
 fn differs_from_backup(path: &Path) -> bool {
@@ -113,11 +100,6 @@ fn audio_mode(version: &Path) -> i32 {
     if all_lan { 2 } else { 3 }
 }
 
-fn audio_route_active(version: &Path) -> bool {
-    let state = audio::wifi_route_state(version);
-    !state.contains("未配置") && !state.contains("状态不可读")
-}
-
 fn sync_device_model(app: &AppWindow, model: &str) {
     if let Some(index) = ds::PRESETS.iter().position(|preset| preset.code == model) {
         app.set_custom_mode(false);
@@ -128,74 +110,114 @@ fn sync_device_model(app: &AppWindow, model: &str) {
     }
 }
 
-fn refresh(app: &AppWindow) {
-    let full = ops::full_features_available();
-    let continuity = install::find_pc_continuity_root().is_some();
-    let xiaoai_available = ops::xiaoai_available();
-    app.set_full_features(full);
-    app.set_continuity_available(continuity);
-    app.set_xiaoai_available(xiaoai_available);
-    app.set_status_text(ops::status_lines().join("\n").into());
+#[derive(Default)]
+struct PatchState {
+    full: bool,
+    continuity: bool,
+    xiaoai: bool,
+    locale: bool,
+    device: bool,
+    device_model: Option<String>,
+    camera: bool,
+    audio: bool,
+    audio_mode: i32,
+    dual_nic: i32,
+    smbios: bool,
+    xiaoai_patch: bool,
+    share_menu: i32,
+}
 
-    let locale_active = current_locale_dll()
-        .as_deref()
-        .is_some_and(locale::is_patched);
-    app.set_locale_active(locale_active);
-
-    app.set_device_active(false);
-    app.set_camera_active(false);
-    app.set_audio_active(false);
-    app.set_audio_mode(0);
-    app.set_dual_nic_state(0);
-    app.set_smbios_active(false);
-
-    if full && let Ok(version) = ops::resolve_full_version_dir() {
-        let (proxy_ok, model) = ds::current_state(&version);
-        let device_active = proxy_ok || model.is_some();
-        app.set_device_active(device_active);
-        if let Some(model) = model.as_deref() {
-            sync_device_model(app, model);
-        }
-
-        let camera_path = version.join(camera::TARGET_DLL);
-        app.set_camera_active(differs_from_backup(&camera_path));
-
-        let mode = audio_mode(&version);
-        let route_active = audio_route_active(&version);
-        let audio_changed = [audio::TARGET_MIPCAUDIO, audio::TARGET_IDMRUNTIME]
-            .iter()
-            .any(|name| differs_from_backup(&version.join(name)));
-        let audio_active = audio_changed || route_active;
-        app.set_audio_active(audio_active);
-        app.set_audio_mode(mode);
-        let dual_state = if !audio_active {
-            0
-        } else {
-            match mode {
-                1 if route_active => 1,
-                1 => 2,
-                2 if !route_active => 1,
-                2 => 2,
-                _ => 3,
-            }
+impl PatchState {
+    fn read() -> Self {
+        let mut state = Self {
+            full: ops::full_features_available(),
+            continuity: install::find_pc_continuity_root().is_some(),
+            xiaoai: ops::xiaoai_available(),
+            locale: ops::resolve_locale_dll(None)
+                .ok()
+                .as_deref()
+                .is_some_and(locale::is_patched),
+            ..Self::default()
         };
-        app.set_dual_nic_state(dual_state);
-
-        let smbios_path = version.join(smbios_spoof::TARGET_DLL);
-        app.set_smbios_active(smbios_spoof::is_patched(&smbios_path));
+        if state.full
+            && let Ok(version) = ops::resolve_full_version_dir()
+        {
+            let (proxy, model) = ds::current_state(&version);
+            state.device = proxy || model.is_some();
+            state.device_model = model;
+            state.camera = camera::is_patched(&version.join(camera::TARGET_DLL));
+            state.audio_mode = audio_mode(&version);
+            let saved_route = audio::wifi_route_state(&version);
+            state.audio = [audio::TARGET_MIPCAUDIO, audio::TARGET_IDMRUNTIME]
+                .iter()
+                .any(|name| differs_from_backup(&version.join(name)))
+                || (!saved_route.contains("未配置") && !saved_route.contains("状态不可读"));
+            state.dual_nic =
+                match mipcmanager_patch::experimental::audio_dual_nic::repair_needed(&version) {
+                    Ok(false) => 1,
+                    Ok(true) => 2,
+                    Err(_) => 3,
+                };
+            state.smbios = smbios_spoof::is_patched(&version.join(smbios_spoof::TARGET_DLL));
+        }
+        state.xiaoai_patch = install::find_xiaoai_root()
+            .and_then(|root| install::latest_version_dir(&root).ok())
+            .is_some_and(|version| ai::current_state(&version));
+        state.share_menu = match ops::share_menu_state() {
+            ops::ShellMenuState::Disabled => 0,
+            ops::ShellMenuState::Enabled => 1,
+            ops::ShellMenuState::Partial => 2,
+        };
+        state
     }
 
-    let xiaoai_patch_active = install::find_xiaoai_root()
-        .and_then(|root| install::latest_version_dir(&root).ok())
-        .is_some_and(|version| ai::current_state(&version));
-    app.set_xiaoai_patch_active(xiaoai_patch_active);
+    fn update(self, app: &AppWindow) {
+        app.set_full_features(self.full);
+        app.set_continuity_available(self.continuity);
+        app.set_xiaoai_available(self.xiaoai);
+        app.set_locale_active(self.locale);
+        app.set_device_active(self.device);
+        if let Some(model) = self.device_model {
+            sync_device_model(app, &model);
+        }
+        app.set_camera_active(self.camera);
+        app.set_audio_active(self.audio);
+        app.set_audio_mode(self.audio_mode);
+        app.set_dual_nic_state(self.dual_nic);
+        app.set_smbios_active(self.smbios);
+        app.set_xiaoai_patch_active(self.xiaoai_patch);
+        app.set_share_menu_state(self.share_menu);
+        app.set_state_ready(true);
+    }
+}
 
-    let share_state = match xiaomi_share_menu::current_state() {
-        xiaomi_share_menu::ShellMenuState::Disabled => 0,
-        xiaomi_share_menu::ShellMenuState::Enabled => 1,
-        xiaomi_share_menu::ShellMenuState::Partial => 2,
-    };
-    app.set_share_menu_state(share_state);
+fn refresh(app: &AppWindow) {
+    if app.get_state_refreshing() || app.get_operation_busy() {
+        return;
+    }
+    app.set_state_refreshing(true);
+    let generation = app.get_state_generation();
+    let weak = app.as_weak();
+    std::thread::spawn(move || {
+        let state = PatchState::read();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(app) = weak.upgrade() {
+                app.set_state_refreshing(false);
+                if generation == app.get_state_generation() && !app.get_operation_busy() {
+                    state.update(&app);
+                } else {
+                    refresh(&app);
+                }
+            }
+        });
+    });
+}
+
+fn operation_allowed(app: &AppWindow) -> bool {
+    app.get_state_ready()
+        && !app.get_operation_busy()
+        && !app.get_downloading()
+        && !app.get_xiaoai_busy()
 }
 
 fn append_log(app: &AppWindow, label: &str, result: Result<Vec<String>>) {
@@ -220,96 +242,28 @@ fn append_log(app: &AppWindow, label: &str, result: Result<Vec<String>>) {
     refresh(app);
 }
 
-fn run_patch(app: &AppWindow, label: &str, f: impl FnOnce() -> Result<Vec<String>>) {
-    append_log(app, label, f());
-}
-
-fn apply_xiaomi_share_menu() -> Result<Vec<String>> {
-    let outcome = xiaomi_share_menu::apply()?;
-    Ok(vec![match outcome {
-        xiaomi_share_menu::PatchOutcome::Applied => {
-            "✓ 已启用 Windows 11 一级右键“使用小米互传发送”".to_string()
-        }
-        xiaomi_share_menu::PatchOutcome::AlreadyApplied => {
-            "• Windows 11 右键小米互传已启用（跳过）".to_string()
-        }
-        _ => "• 右键小米互传状态未变化".to_string(),
-    }])
-}
-
-fn revert_xiaomi_share_menu() -> Result<Vec<String>> {
-    let outcome = xiaomi_share_menu::revert()?;
-    Ok(vec![match outcome {
-        xiaomi_share_menu::PatchOutcome::Reverted => {
-            "✓ 已关闭 Windows 11 一级右键小米互传并清理相关组件".to_string()
-        }
-        xiaomi_share_menu::PatchOutcome::AlreadyReverted => {
-            "• Windows 11 右键小米互传已关闭（跳过）".to_string()
-        }
-        _ => "• 右键小米互传状态未变化".to_string(),
-    }])
-}
-
-fn ensure_manual_installer_kind(
-    installer: &Path,
-    expected: install::pc_manager_installer::InstallerKind,
-) -> Result<()> {
-    let name = installer
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    let Some(actual) = install::pc_manager_installer::classify_installer_filename(name) else {
-        bail!(
-            "无法从文件名识别安装包类型：{}；请使用对应产品的官方安装包文件名",
-            installer.display()
-        );
-    };
-    if actual != expected {
-        bail!(
-            "安装包类型不匹配：当前入口仅用于{}，实际识别为{}",
-            expected.label(),
-            actual.label()
-        );
+fn run_patch(
+    app: &AppWindow,
+    label: &str,
+    f: impl FnOnce() -> Result<Vec<String>> + Send + 'static,
+) {
+    if !operation_allowed(app) {
+        return;
     }
-    Ok(())
-}
-
-fn ensure_manual_url_kind(
-    url: &str,
-    expected: install::pc_manager_installer::InstallerKind,
-) -> Result<()> {
-    let filename = install::pc_manager_installer::download_filename(url)?;
-    ensure_manual_installer_kind(Path::new(&filename), expected)
-}
-
-fn xiaoai_uninstall_description() -> Result<String> {
-    let root = install::find_xiaoai_root().context("未检测到已安装的超级小爱")?;
-    Ok(format!(
-        "将卸载 超级小爱\n\n安装目录：{}\n\n此操作不可逆！",
-        root.display()
-    ))
-}
-
-fn uninstall_xiaoai() -> Result<Vec<String>> {
-    let root = install::find_xiaoai_root().context("未检测到已安装的超级小爱")?;
-    let version = install::latest_version_dir(&root)?;
-    let uninstall_exe = version.join("uninstall.exe");
-    let mut log = vec![format!("开始卸载超级小爱：{}", root.display())];
-    log.push(format!("  正在运行卸载程序：{}", uninstall_exe.display()));
-    let removed = uninstall::run_product_uninstaller(&uninstall_exe)?;
-    if removed {
-        log.push("  ✓ 主程序卸载完成".to_string());
-        if uninstall::remove_dir_if_exists(&root)? {
-            log.push(format!("  ✓ 已清理 {}", root.display()));
-        }
-    } else {
-        log.push(format!(
-            "  ⚠ 卸载程序未删除自身，卸载可能未完成：{}",
-            uninstall_exe.display()
-        ));
-    }
-    log.push("✓ 超级小爱卸载流程完成".to_string());
-    Ok(log)
+    app.set_operation_busy(true);
+    app.set_state_generation(app.get_state_generation() + 1);
+    let weak = app.as_weak();
+    let label = label.to_string();
+    std::thread::spawn(move || {
+        let result = f();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(app) = weak.upgrade() {
+                app.set_operation_busy(false);
+                app.set_share_menu_busy(false);
+                append_log(&app, &label, result);
+            }
+        });
+    });
 }
 
 #[cfg(windows)]
@@ -335,6 +289,7 @@ fn spawn_install_operation(
     let control = ops::DownloadControl::default();
     let worker_control = control.clone();
     if let Some(app) = app_weak.upgrade() {
+        app.set_state_generation(app.get_state_generation() + 1);
         match product {
             InstallProduct::Manager => {
                 app.set_downloading(true);
@@ -381,6 +336,7 @@ fn spawn_install_operation(
         let result = operation(&worker_control, &mut report);
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(app) = app_weak.upgrade() {
+                app.set_state_generation(app.get_state_generation() + 1);
                 match product {
                     InstallProduct::Manager => {
                         app.set_downloading(false);
@@ -396,23 +352,6 @@ fn spawn_install_operation(
         });
     });
     control
-}
-
-#[cfg(windows)]
-fn spawn_xiaomi_share_operation(
-    app_weak: slint::Weak<AppWindow>,
-    label: String,
-    operation: impl FnOnce() -> Result<Vec<String>> + Send + 'static,
-) {
-    std::thread::spawn(move || {
-        let result = operation();
-        let _ = slint::invoke_from_event_loop(move || {
-            if let Some(app) = app_weak.upgrade() {
-                app.set_share_menu_busy(false);
-                append_log(&app, &label, result);
-            }
-        });
-    });
 }
 
 #[cfg(windows)]
@@ -432,14 +371,14 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move || {
             let app = app_weak.unwrap();
-            if app.get_share_menu_busy() {
+            if !operation_allowed(&app) {
                 return;
             }
             app.set_share_menu_busy(true);
-            spawn_xiaomi_share_operation(
-                app_weak.clone(),
-                i18n::tr("gui.op.share-menu.apply", lang).to_string(),
-                apply_xiaomi_share_menu,
+            run_patch(
+                &app,
+                i18n::tr("gui.op.share-menu.apply", lang),
+                ops::apply_share_menu,
             );
         }
     });
@@ -447,14 +386,14 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move || {
             let app = app_weak.unwrap();
-            if app.get_share_menu_busy() {
+            if !operation_allowed(&app) {
                 return;
             }
             app.set_share_menu_busy(true);
-            spawn_xiaomi_share_operation(
-                app_weak.clone(),
-                i18n::tr("gui.op.share-menu.revert", lang).to_string(),
-                revert_xiaomi_share_menu,
+            run_patch(
+                &app,
+                i18n::tr("gui.op.share-menu.revert", lang),
+                ops::revert_share_menu,
             );
         }
     });
@@ -484,7 +423,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         move |model: SharedString| {
             let m = model.to_string();
             let label = i18n::tr("gui.op.device.apply", lang).replace("{model}", &m);
-            run_patch(&app_weak.unwrap(), &label, || {
+            run_patch(&app_weak.unwrap(), &label, move || {
                 ops::apply_device(&m, None, false)
             });
         }
@@ -556,7 +495,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let app = app_weak.unwrap();
             let label = i18n::tr("gui.op.dualnic.diagnose", lang);
             match ops::resolve_full_version_dir() {
-                Ok(dir) => run_patch(&app, label, || {
+                Ok(dir) => run_patch(&app, label, move || {
                     mipcmanager_patch::experimental::audio_dual_nic::diagnose(&dir)
                 }),
                 Err(e) => append_log(&app, label, Err(e)),
@@ -569,7 +508,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let app = app_weak.unwrap();
             let label = i18n::tr("gui.op.dualnic.fix", lang);
             match ops::resolve_full_version_dir() {
-                Ok(dir) => run_patch(&app, label, || {
+                Ok(dir) => run_patch(&app, label, move || {
                     mipcmanager_patch::experimental::audio_dual_nic::auto_fix(&dir)
                 }),
                 Err(e) => append_log(&app, label, Err(e)),
@@ -582,7 +521,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         move |model: SharedString| {
             let m = model.to_string();
             let label = i18n::tr("gui.op.smbios.apply", lang).replace("{model}", &m);
-            run_patch(&app_weak.unwrap(), &label, || {
+            run_patch(&app_weak.unwrap(), &label, move || {
                 ops::apply_smbios(Some(&m), None, false)
             });
         }
@@ -638,11 +577,16 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     });
     app.on_request_uninstall({
         let app_weak = app_weak.clone();
-        move || {
+        move |kind: i32| {
             let app = app_weak.unwrap();
-            match ops::uninstall_product_description() {
+            let product = if kind == 0 {
+                ops::SoftwareProduct::PcManager
+            } else {
+                ops::SoftwareProduct::Continuity
+            };
+            match ops::uninstall_software_description(product) {
                 Ok(d) => {
-                    app.set_confirm_xiaoai(false);
+                    app.set_confirm_product(kind);
                     app.set_confirm_desc(d.into());
                     app.set_show_confirm(true);
                 }
@@ -654,9 +598,9 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move || {
             let app = app_weak.unwrap();
-            match xiaoai_uninstall_description() {
+            match ops::uninstall_software_description(ops::SoftwareProduct::Xiaoai) {
                 Ok(d) => {
-                    app.set_confirm_xiaoai(true);
+                    app.set_confirm_product(2);
                     app.set_confirm_desc(d.into());
                     app.set_show_confirm(true);
                 }
@@ -668,19 +612,19 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move || {
             let app = app_weak.unwrap();
-            let xiaoai = app.get_confirm_xiaoai();
+            let product = match app.get_confirm_product() {
+                0 => ops::SoftwareProduct::PcManager,
+                1 => ops::SoftwareProduct::Continuity,
+                _ => ops::SoftwareProduct::Xiaoai,
+            };
             app.set_show_confirm(false);
-            app.set_confirm_xiaoai(false);
+            app.set_confirm_product(0);
             app.set_confirm_desc("".into());
-            if xiaoai {
-                run_patch(&app, i18n::tr("install.row.xiaoai", lang), uninstall_xiaoai);
-            } else {
-                run_patch(
-                    &app,
-                    i18n::tr("gui.op.uninstall.product", lang),
-                    ops::uninstall_product,
-                );
-            }
+            run_patch(
+                &app,
+                i18n::tr("gui.op.uninstall.product", lang),
+                move || ops::uninstall_software(product),
+            );
         }
     });
     app.on_cancel_uninstall({
@@ -688,7 +632,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         move || {
             let app = app_weak.unwrap();
             app.set_show_confirm(false);
-            app.set_confirm_xiaoai(false);
+            app.set_confirm_product(0);
             app.set_confirm_desc("".into());
         }
     });
@@ -700,7 +644,8 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            if app.get_downloading() {
+            if !operation_allowed(&app) || app.get_full_features() || app.get_continuity_available()
+            {
                 return;
             }
             let Some(source) = ops::RecommendedInstaller::MANAGER_VARIANTS
@@ -715,7 +660,12 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
                 InstallProduct::Manager,
                 lang,
                 move |control, progress| {
-                    ops::download_and_install_recommended(source, control, progress)
+                    let kind = if source == ops::RecommendedInstaller::PcManager {
+                        InstallerKind::XiaomiPcManager
+                    } else {
+                        InstallerKind::PcContinuity
+                    };
+                    ops::download_and_install_product(source.url(), kind, control, progress)
                 },
             ));
         }
@@ -725,7 +675,10 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         let download = xiaoai_download.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) {
+            if app_weak
+                .upgrade()
+                .is_none_or(|app| !operation_allowed(&app) || app.get_xiaoai_available())
+            {
                 return;
             }
             let source = ops::RecommendedInstaller::Xiaoai;
@@ -779,20 +732,27 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            if app.get_downloading() {
+            if !operation_allowed(&app) || app.get_full_features() || app.get_continuity_available()
+            {
                 return;
             }
-            if let Err(e) = ensure_manual_url_kind(&url, InstallerKind::XiaomiPcManager) {
+            if let Err(e) = ops::ensure_manual_url_kind(&url, InstallerKind::XiaomiPcManager) {
                 append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
                 return;
             }
+            app.set_manager_source_idx(0);
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
                 i18n::tr("install.source.manager", lang).into(),
                 InstallProduct::Manager,
                 lang,
                 move |control, progress| {
-                    ops::download_and_install_pc_manager(Some(&url), control, progress)
+                    ops::download_and_install_product(
+                        &url,
+                        InstallerKind::XiaomiPcManager,
+                        control,
+                        progress,
+                    )
                 },
             ));
         }
@@ -801,7 +761,11 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_manager_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) {
+            if app_weak.upgrade().is_none_or(|app| {
+                !operation_allowed(&app)
+                    || app.get_full_features()
+                    || app.get_continuity_available()
+            }) {
                 return;
             }
             if let Some(path) = rfd::FileDialog::new()
@@ -820,22 +784,25 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move |path: SharedString| {
             let app = app_weak.unwrap();
-            if app.get_downloading() {
+            if !operation_allowed(&app) || app.get_full_features() || app.get_continuity_available()
+            {
                 return;
             }
             let path = PathBuf::from(path.to_string());
-            if let Err(e) = ensure_manual_installer_kind(&path, InstallerKind::XiaomiPcManager) {
+            if let Err(e) = ops::ensure_manual_installer_kind(&path, InstallerKind::XiaomiPcManager)
+            {
                 append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
                 return;
             }
             let label =
                 i18n::tr("gui.op.install", lang).replace("{path}", &path.display().to_string());
+            app.set_manager_source_idx(0);
             spawn_install_operation(
                 app_weak.clone(),
                 label,
                 InstallProduct::Manager,
                 lang,
-                move |_, _| ops::install_from_path(&path),
+                move |_, _| ops::install_product_from_path(&path, InstallerKind::XiaomiPcManager),
             );
             app.set_manager_path_input("".into());
         }
@@ -852,20 +819,27 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            if app.get_downloading() {
+            if !operation_allowed(&app) || app.get_full_features() || app.get_continuity_available()
+            {
                 return;
             }
-            if let Err(e) = ensure_manual_url_kind(&url, InstallerKind::PcContinuity) {
+            if let Err(e) = ops::ensure_manual_url_kind(&url, InstallerKind::PcContinuity) {
                 append_log(&app, i18n::tr("install.kind.continuity", lang), Err(e));
                 return;
             }
+            app.set_manager_source_idx(app.get_continuity_source_idx() + 1);
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
                 i18n::tr("install.kind.continuity", lang).into(),
                 InstallProduct::Manager,
                 lang,
                 move |control, progress| {
-                    ops::download_and_install_pc_manager(Some(&url), control, progress)
+                    ops::download_and_install_product(
+                        &url,
+                        InstallerKind::PcContinuity,
+                        control,
+                        progress,
+                    )
                 },
             ));
         }
@@ -874,7 +848,11 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_continuity_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) {
+            if app_weak.upgrade().is_none_or(|app| {
+                !operation_allowed(&app)
+                    || app.get_full_features()
+                    || app.get_continuity_available()
+            }) {
                 return;
             }
             if let Some(path) = rfd::FileDialog::new()
@@ -893,22 +871,24 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move |path: SharedString| {
             let app = app_weak.unwrap();
-            if app.get_downloading() {
+            if !operation_allowed(&app) || app.get_full_features() || app.get_continuity_available()
+            {
                 return;
             }
             let path = PathBuf::from(path.to_string());
-            if let Err(e) = ensure_manual_installer_kind(&path, InstallerKind::PcContinuity) {
+            if let Err(e) = ops::ensure_manual_installer_kind(&path, InstallerKind::PcContinuity) {
                 append_log(&app, i18n::tr("install.kind.continuity", lang), Err(e));
                 return;
             }
             let label =
                 i18n::tr("gui.op.install", lang).replace("{path}", &path.display().to_string());
+            app.set_manager_source_idx(app.get_continuity_source_idx() + 1);
             spawn_install_operation(
                 app_weak.clone(),
                 label,
                 InstallProduct::Manager,
                 lang,
-                move |_, _| ops::install_from_path(&path),
+                move |_, _| ops::install_product_from_path(&path, InstallerKind::PcContinuity),
             );
             app.set_continuity_path_input("".into());
         }
@@ -925,7 +905,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            if app.get_xiaoai_busy() {
+            if !operation_allowed(&app) || app.get_xiaoai_available() {
                 return;
             }
             *download.borrow_mut() = Some(spawn_install_operation(
@@ -941,7 +921,10 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_xiaoai_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) {
+            if app_weak
+                .upgrade()
+                .is_none_or(|app| !operation_allowed(&app) || app.get_xiaoai_available())
+            {
                 return;
             }
             if let Some(path) = rfd::FileDialog::new()
@@ -967,7 +950,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
                 return;
             }
             let app = app_weak.unwrap();
-            if app.get_xiaoai_busy() {
+            if !operation_allowed(&app) || app.get_xiaoai_available() {
                 return;
             }
             app.set_xiaoai_path_input("".into());

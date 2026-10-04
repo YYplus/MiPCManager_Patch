@@ -9,6 +9,11 @@ on:
       - main
       - tmp/ui-preview-build-base
   workflow_dispatch:
+    inputs:
+      gui_preview:
+        description: Upload the GUI preview executable
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,7 +32,7 @@ jobs:
           cache-on-failure: true
 
       - name: cargo fmt
-        run: cargo fmt --all
+        run: cargo fmt --all -- --check
 
       - name: cargo check lib
         run: cargo check --lib
@@ -48,12 +53,14 @@ jobs:
         run: cargo build --release --bin MiPCM_GUI
 
       - name: Stage preview executable
+        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target\release\MiPCM_GUI.exe dist\MiPCM_Patch_UI_Preview.exe
 
       - name: Upload GUI preview
+        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
         uses: actions/upload-artifact@v4
         with:
           name: MiPCM-Patch-Unified-Preview

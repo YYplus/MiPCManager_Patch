@@ -242,6 +242,102 @@ pub fn launch_installer(installer: &Path) -> Result<u32> {
     }
 }
 
+/// GUI keeps both mutually exclusive install entries busy until the installer
+/// and its children exit, then restores the temporary proxy directory.
+pub fn launch_installer_and_wait(installer: &Path) -> Result<()> {
+    let installer = installer.canonicalize()?;
+    let proxy = installer
+        .parent()
+        .context("无法确定安装包所在目录")?
+        .join(crate::patches::device::PROXY_DLL_NAME);
+    let previous = match fs::read(&proxy) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    let backup = crate::install::backup_path(&proxy);
+    let backup_existed = backup.exists();
+    let temporary = patch_temporary_path(&proxy);
+    let temporary_existed = temporary.exists();
+    let pid = launch_installer(&installer)?;
+    let result = wait_for_installer_tree(pid);
+    let cleanup = rollback_proxy(
+        &proxy,
+        previous.as_deref(),
+        &backup,
+        backup_existed,
+        &temporary,
+        temporary_existed,
+    );
+    match (result, cleanup) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (result, Err(error)) => {
+            Err(error.context(format!("安装包目录恢复失败；安装器等待结果：{result:?}")))
+        }
+    }
+}
+
+#[cfg(windows)]
+fn wait_for_installer_tree(pid: u32) -> Result<()> {
+    use std::collections::HashSet;
+    use std::time::Duration;
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+
+    let mut tracked = HashSet::from([Pid::from_u32(pid)]);
+    let mut system = System::new();
+    let roots: Vec<_> = [
+        crate::install::DEFAULT_INSTALL_ROOT,
+        crate::install::DEFAULT_PC_CONTINUITY_ROOT,
+        crate::install::DEFAULT_HYPERCONNECT_ROOT,
+    ]
+    .iter()
+    .map(|root| root.replace('/', "\\").to_ascii_lowercase())
+    .collect();
+    let mut quiet = 0;
+    loop {
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        loop {
+            let before = tracked.len();
+            let children: Vec<_> = system
+                .processes()
+                .iter()
+                .filter_map(|(pid, process)| {
+                    let parent = process.parent()?;
+                    let installed = process.exe().is_some_and(|exe| {
+                        let exe = exe
+                            .to_string_lossy()
+                            .replace('/', "\\")
+                            .to_ascii_lowercase();
+                        roots
+                            .iter()
+                            .any(|root| exe.starts_with(&format!("{root}\\")))
+                    });
+                    (tracked.contains(&parent) && !installed).then_some(*pid)
+                })
+                .collect();
+            tracked.extend(children);
+            if tracked.len() == before {
+                break;
+            }
+        }
+        if tracked.iter().all(|pid| system.process(*pid).is_none()) {
+            quiet += 1;
+            if quiet >= 3 {
+                return Ok(());
+            }
+        } else {
+            quiet = 0;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[cfg(not(windows))]
+fn wait_for_installer_tree(_pid: u32) -> Result<()> {
+    bail!("安装器等待仅支持 Windows")
+}
+
 /// 旁路补丁：函数入口改为 `mov al,1; ret`（MatchProduct / WinVersionMatch）。
 const MATCH_BYPASS_PATCH: [u8; 3] = [0xB0, 0x01, 0xC3];
 

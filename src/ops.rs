@@ -6,7 +6,7 @@
 use crate::{
     experimental::smbios_spoof,
     install::{self, pc_manager_installer, xiaoai_installer},
-    patches::{ai, audio, camera, camera::dotnet, device, locale},
+    patches::{ai, audio, camera, camera::dotnet, device, locale, xiaomi_share_menu},
     uninstall,
 };
 use anyhow::{Context, Result, bail};
@@ -15,6 +15,7 @@ use std::time::Duration;
 
 pub use crate::infra::download::{DownloadControl, DownloadPhase, DownloadProgress};
 pub use install::sources::RecommendedInstaller;
+pub use xiaomi_share_menu::ShellMenuState;
 
 /// 小米电脑管家相关进程（不含扩展名），用于启动时全量关闭的兜底匹配。
 pub const PROC_MIPCM_ALL: &[&str] = &[
@@ -94,6 +95,14 @@ pub fn close_all_on_startup() -> Option<String> {
 
 /// 生成与 CLI `status` 一致的状态文本行。
 pub fn status_lines() -> Vec<String> {
+    status_lines_with_share_state(share_menu_state())
+}
+
+pub fn share_menu_state() -> ShellMenuState {
+    xiaomi_share_menu::current_state()
+}
+
+pub fn status_lines_with_share_state(share_state: ShellMenuState) -> Vec<String> {
     let mut out = Vec::new();
     out.push("== 小米电脑管家 / 超级小爱补丁状态 ==".to_string());
     let manager_root = install::find_install_root();
@@ -101,7 +110,6 @@ pub fn status_lines() -> Vec<String> {
     let xiaoai_root = install::find_xiaoai_root();
     if manager_root.is_none() && continuity_root.is_none() && xiaoai_root.is_none() {
         out.push("未探测到安装目录（可用 --dll/--dir 手动指定）。".to_string());
-        return out;
     }
     if let Some(root) = manager_root {
         out.push(String::new());
@@ -143,7 +151,58 @@ pub fn status_lines() -> Vec<String> {
             Err(error) => out.push(format!("（无法确定版本目录：{error}）")),
         }
     }
+    let state = match share_state {
+        ShellMenuState::Disabled => "未启用",
+        ShellMenuState::Enabled => "已启用",
+        ShellMenuState::Partial => "状态不完整（可重新应用修复）",
+    };
+    out.push(format!("Windows 11 右键小米互传: {state}"));
     out
+}
+
+// ===================== Windows 11 右键小米互传 =====================
+
+pub fn apply_share_menu() -> Result<Vec<String>> {
+    share_menu_operation(xiaomi_share_menu::apply)
+}
+
+pub fn revert_share_menu() -> Result<Vec<String>> {
+    share_menu_operation(xiaomi_share_menu::revert)
+}
+
+fn share_menu_operation(
+    action: impl FnMut() -> Result<xiaomi_share_menu::PatchOutcome>,
+) -> Result<Vec<String>> {
+    let mut log = Vec::new();
+    run_patch(
+        &PatchOp {
+            procs: &[],
+            required: false,
+            no_kill: true,
+        },
+        &mut log,
+        action,
+        |outcome| {
+            vec![
+                match outcome {
+                    xiaomi_share_menu::PatchOutcome::Applied => {
+                        "✓ 已启用 Windows 11 一级右键“使用小米互传发送”"
+                    }
+                    xiaomi_share_menu::PatchOutcome::AlreadyApplied => {
+                        "• Windows 11 右键小米互传已启用（跳过）"
+                    }
+                    xiaomi_share_menu::PatchOutcome::Reverted => {
+                        "✓ 已关闭 Windows 11 一级右键小米互传并清理相关组件"
+                    }
+                    xiaomi_share_menu::PatchOutcome::AlreadyReverted => {
+                        "• Windows 11 右键小米互传已关闭（跳过）"
+                    }
+                }
+                .to_string(),
+            ]
+        },
+    )?;
+    Ok(log)
 }
 
 fn push_full_installation_status(root: &Path, out: &mut Vec<String>) {
@@ -601,6 +660,65 @@ pub fn uninstall_product_description() -> Result<String> {
     uninstall::uninstall_description()
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum SoftwareProduct {
+    PcManager,
+    Continuity,
+    Xiaoai,
+}
+
+impl SoftwareProduct {
+    fn root(self) -> Result<PathBuf> {
+        match self {
+            Self::PcManager => install::find_install_root(),
+            Self::Continuity => install::find_pc_continuity_root(),
+            Self::Xiaoai => install::find_xiaoai_root(),
+        }
+        .context("未检测到所选产品的安装目录")
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::PcManager => "小米电脑管家",
+            Self::Continuity => "小米互联",
+            Self::Xiaoai => "超级小爱",
+        }
+    }
+}
+
+pub fn uninstall_software_description(product: SoftwareProduct) -> Result<String> {
+    let root = product.root()?;
+    let details = match product {
+        SoftwareProduct::PcManager => "包含：主程序、AIService、MiService、相关服务与临时文件\n",
+        SoftwareProduct::Continuity => "包含：所选互联产品、相关服务与临时文件\n",
+        SoftwareProduct::Xiaoai => "",
+    };
+    Ok(format!(
+        "将卸载 {}\n\n安装目录：{}\n{details}\n此操作不可逆！",
+        product.label(),
+        root.display()
+    ))
+}
+
+pub fn uninstall_software(product: SoftwareProduct) -> Result<Vec<String>> {
+    let root = product.root()?;
+    let mut log = Vec::new();
+    match product {
+        SoftwareProduct::PcManager => uninstall::uninstall_xiaomi_pc_manager(&root, &mut log)?,
+        SoftwareProduct::Continuity => uninstall::uninstall_pc_continuity(&root, &mut log)?,
+        SoftwareProduct::Xiaoai => {
+            let version = install::latest_version_dir(&root)?;
+            let exe = version.join("uninstall.exe");
+            if !uninstall::run_product_uninstaller(&exe)? {
+                bail!("超级小爱卸载未完成，已保留安装目录：{}", root.display());
+            }
+            uninstall::remove_dir_if_exists(&root)?;
+            log.push("✓ 超级小爱卸载完成".to_string());
+        }
+    }
+    Ok(log)
+}
+
 /// 卸载小米电脑管家 / 小米互联（完整流程：主程序 + 子产品 + 服务 + 文件清理）。
 ///
 /// 此操作不可逆，调用方需在执行前获取用户确认。
@@ -629,6 +747,89 @@ pub fn uninstall_product() -> Result<Vec<String>> {
 }
 
 // ===================== 安装 =====================
+
+/// Independent GUI entry points reject unknown and wrong-product filenames.
+pub fn ensure_manual_installer_kind(
+    installer: &Path,
+    expected: pc_manager_installer::InstallerKind,
+) -> Result<()> {
+    let name = installer
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let actual = pc_manager_installer::classify_installer_filename(name).with_context(|| {
+        format!(
+            "无法从文件名识别安装包类型：{}；请使用对应产品的官方安装包文件名",
+            installer.display()
+        )
+    })?;
+    if actual != expected {
+        bail!(
+            "安装包类型不匹配：当前入口仅用于{}，实际识别为{}",
+            expected.label(),
+            actual.label()
+        );
+    }
+    Ok(())
+}
+
+pub fn ensure_manual_url_kind(
+    url: &str,
+    expected: pc_manager_installer::InstallerKind,
+) -> Result<()> {
+    let name = pc_manager_installer::download_filename(url)?;
+    ensure_manual_installer_kind(Path::new(&name), expected)
+}
+
+fn ensure_gui_install_available(kind: pc_manager_installer::InstallerKind) -> Result<()> {
+    let manager = install::find_install_root();
+    let continuity = install::find_pc_continuity_root();
+    ensure_gui_install_allowed(kind, manager.as_deref(), continuity.as_deref())
+}
+
+fn ensure_gui_install_allowed(
+    kind: pc_manager_installer::InstallerKind,
+    manager: Option<&Path>,
+    continuity: Option<&Path>,
+) -> Result<()> {
+    ensure_install_allowed(kind, manager, continuity)?;
+    if let Some(root) = manager.or(continuity) {
+        bail!("已检测到安装目录 {}，请先卸载当前产品", root.display());
+    }
+    Ok(())
+}
+
+pub fn install_product_from_path(
+    installer: &Path,
+    expected: pc_manager_installer::InstallerKind,
+) -> Result<Vec<String>> {
+    ensure_manual_installer_kind(installer, expected)?;
+    ensure_gui_install_available(expected)?;
+    pc_manager_installer::launch_installer_and_wait(installer)?;
+    Ok(vec![format!(
+        "{}安装程序已结束：{}",
+        expected.label(),
+        installer.display()
+    )])
+}
+
+pub fn download_and_install_product(
+    url: &str,
+    expected: pc_manager_installer::InstallerKind,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<Vec<String>> {
+    let url = url.trim();
+    ensure_manual_url_kind(url, expected)?;
+    ensure_gui_install_available(expected)?;
+    let dir = install::sources::download_dir(url)?;
+    let installer = pc_manager_installer::download_installer(url, &dir, control, progress)?;
+    control.check_cancelled()?;
+    let _guard = install::sources::protect_downloaded_installer(&installer, url, control)?;
+    let mut log = vec![format!("✓ 安装包已下载：{}", installer.display())];
+    log.extend(install_product_from_path(&installer, expected)?);
+    Ok(log)
+}
 
 /// 下载选定内置版本，沿用对应产品的安装和补丁流程。
 pub fn download_and_install_recommended(
@@ -1107,5 +1308,77 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("已安装小米电脑管家"));
+    }
+
+    #[test]
+    fn gui_install_gating_blocks_both_entries_for_either_product() {
+        use pc_manager_installer::InstallerKind;
+        for kind in [InstallerKind::XiaomiPcManager, InstallerKind::PcContinuity] {
+            assert!(ensure_gui_install_allowed(kind, None, None).is_ok());
+            for (manager, continuity) in [
+                (Some(Path::new("XiaomiPCManager")), None),
+                (None, Some(Path::new("PcContinuity"))),
+                (None, Some(Path::new("HyperConnect"))),
+            ] {
+                assert!(ensure_gui_install_allowed(kind, manager, continuity).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn independent_manual_entries_reject_the_other_product_before_any_io() {
+        use pc_manager_installer::InstallerKind;
+        for (source, expected) in [
+            (
+                RecommendedInstaller::PcManager,
+                InstallerKind::XiaomiPcManager,
+            ),
+            (
+                RecommendedInstaller::PcContinuity,
+                InstallerKind::PcContinuity,
+            ),
+            (
+                RecommendedInstaller::HyperConnectBeta,
+                InstallerKind::PcContinuity,
+            ),
+        ] {
+            assert!(ensure_manual_url_kind(source.url(), expected).is_ok());
+            let opposite = match expected {
+                InstallerKind::XiaomiPcManager => InstallerKind::PcContinuity,
+                InstallerKind::PcContinuity => InstallerKind::XiaomiPcManager,
+            };
+            let filename = pc_manager_installer::download_filename(source.url()).unwrap();
+            assert!(
+                install_product_from_path(Path::new(&filename), opposite)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("安装包类型不匹配")
+            );
+            assert!(
+                download_and_install_product(
+                    source.url(),
+                    opposite,
+                    &DownloadControl::default(),
+                    |_| {}
+                )
+                .unwrap_err()
+                .to_string()
+                .contains("安装包类型不匹配")
+            );
+        }
+        assert!(
+            ensure_manual_installer_kind(
+                Path::new("installer.exe"),
+                InstallerKind::XiaomiPcManager
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_manual_installer_kind(
+                Path::new("XiaoaiAgent_Setup.exe"),
+                InstallerKind::PcContinuity
+            )
+            .is_err()
+        );
     }
 }

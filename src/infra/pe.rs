@@ -69,7 +69,7 @@ fn rd_u64(d: &[u8], o: usize) -> u64 {
 }
 
 fn read_cstr(data: &[u8], start: usize) -> Option<String> {
-    let end = data[start..].iter().position(|&b| b == 0)?;
+    let end = data.get(start..)?.iter().position(|&b| b == 0)?;
     Some(String::from_utf8_lossy(&data[start..start + end]).to_string())
 }
 
@@ -84,14 +84,22 @@ impl PeImage {
         );
         let coff_offset = pe_offset + 4;
         let opt_offset = coff_offset + 20;
+        let size_of_optional = rd_u16(&data, coff_offset + 16) as usize;
+        ensure!(
+            size_of_optional >= 0xF0 && opt_offset + size_of_optional <= data.len(),
+            "PE 可选头不完整"
+        );
         let magic = rd_u16(&data, opt_offset + opt::MAGIC);
         ensure!(
             magic == PE32PLUS_MAGIC,
             "仅支持 PE32+ (x64)，magic=0x{magic:X}"
         );
         let num_sections = rd_u16(&data, coff_offset + 2) as usize;
-        let size_of_optional = rd_u16(&data, coff_offset + 16) as usize;
         let section_table_offset = opt_offset + size_of_optional;
+        ensure!(
+            section_table_offset + num_sections * SECTION_HEADER_SIZE <= data.len(),
+            "PE 节表不完整"
+        );
         Ok(Self {
             data,
             coff_offset,

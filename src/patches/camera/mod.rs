@@ -42,3 +42,26 @@ pub fn apply(dll_path: &Path) -> Result<InjectOutcome> {
 pub fn revert(dll_path: &Path) -> Result<()> {
     install::restore_backup(dll_path)
 }
+
+/// Check the actual injected IL guard, independent of unrelated file changes.
+pub fn is_patched(dll_path: &Path) -> bool {
+    let Ok(data) = std::fs::read(dll_path) else {
+        return false;
+    };
+    let Ok(pe) = PeImage::parse(data) else {
+        return false;
+    };
+    let Ok(method) = dotnet::metadata::find_method(&pe, TYPE_NAME, METHOD_SUFFIX) else {
+        return false;
+    };
+    let Some(offset) = pe.rva_to_offset(method.body_rva) else {
+        return false;
+    };
+    let Ok(body) = dotnet::method_body::MethodBody::parse(&pe.data, offset) else {
+        return false;
+    };
+    body.il.starts_with(&dotnet::method_body::build_guard(
+        ARG_INDEX,
+        KLOCAL_CAMERA_DISABLED,
+    ))
+}

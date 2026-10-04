@@ -18,8 +18,8 @@
 工具自动探测 `XiaomiPCManager`、小米互联 / 互联互通（`PcContinuity` / `HyperConnect`）与超级小爱（`XiaoaiAgent`）的最新安装版本：
 
 - **XiaomiPCManager**（完整版）：位于 `C:\Program Files\MI\XiaomiPCManager`，支持所有补丁功能。工具启动时自动关闭其相关进程。
-- **PcContinuity**（小米互联）：位于 `C:\Program Files\MI\PcContinuity`，目前**仅支持地区伪装**。
-- **HyperConnect**（小米互联互通 2.0）：位于 `C:\Program Files\MI\HyperConnect`，原生互联 DLL 在版本目录下的 `resources\native-interconnect\win32` 子目录（`micont_rtm.dll`、`micont_service.exe` 等），同样**仅支持地区伪装**。
+- **PcContinuity**（小米互联）：位于 `C:\Program Files\MI\PcContinuity`，支持**地区伪装与 Windows 11 右键小米互传**。
+- **HyperConnect**（小米互联互通 2.0）：位于 `C:\Program Files\MI\HyperConnect`，原生互联 DLL 在版本目录下的 `resources\native-interconnect\win32` 子目录（`micont_rtm.dll`、`micont_service.exe` 等），同样支持**地区伪装与 Windows 11 右键小米互传**。
 - **XiaoaiAgent**（超级小爱）：位于 `C:\Program Files\MI\XiaoaiAgent`，工具从其子目录中选择版本号最高的目录，不对具体版本设置适配限制。
 
 小米互联 / 互联互通两个产品均不做启动时全量进程关闭（仅按功能关闭对应进程）。
@@ -34,7 +34,7 @@
 | 设备伪装 | `XiaomiPcManager.exe` |
 | 超级小爱 | `XiaoaiAgent.exe` |
 
-补丁前自动备份原文件（文件名后追加 `.orig.bak`），所有补丁幂等且可还原。若 Patch/还原时遇到 access denied 错误（`os error 5`），会自动关闭对应进程并重试一次。
+补丁前自动备份原文件（文件名后追加 `.orig.bak`），文件补丁幂等且可还原；右键菜单使用独立的 package / 载荷状态检测与清理。地区与 SMBIOS 共用同一 DLL 备份，还原时保留另一项补丁的当前状态。若 Patch/还原时遇到 access denied 错误（`os error 5`），会自动关闭对应进程并重试一次。
 
 修改 `Program Files` 下文件需管理员权限，release exe 内嵌 `requireAdministrator` manifest，双击启动即弹 UAC，运行时仍保留提权兜底。可通过环境变量 `MIPCM_NO_ELEVATE=1` 跳过运行时提权兜底（但 Release manifest 强制提权不会被跳过）。
 
@@ -115,7 +115,7 @@ if (exception_id == CameraExceptionId.kLOCAL_CAMERA_DISABLED)
 
 仅替换上述三处会让广播身份使用有线 MAC，但实际 WFD 音频会话由 `MiPlayCastService.exe` 子进程建立。抓取日志可见故障场景已完成发现、认证与 `SETUP`，PC 发出 `PLAY` 后手机立刻发送 `wfd_trigger_method: TEARDOWN`，且没有 RTP 音频包。根因是有线与 Wi-Fi 同时在线且同一 IPv4 子网时，Windows 因有线跃点更低，令该会话从有线接口出站，手机发现身份与媒体接口不一致而拒绝播放。
 
-因此 `audio apply --mode lan` 默认会新增一条由工具记录和管理的 **持久 Wi-Fi 本地子网路由**（路由跃点为 1）。它只匹配 Wi-Fi 的本地 IPv4 前缀；互联网默认路由继续按用户原有的有线跃点选择。切回 `--mode wifi` 或执行 `audio revert` 会只删除本工具创建的该条路由。必要时可用 `--no-wifi-local-route` 关闭此行为。
+因此 `audio apply --mode wifi` 默认会新增一条由工具记录和管理的 **持久 Wi-Fi 本地子网路由**（路由跃点为 1）。它只匹配 Wi-Fi 的本地 IPv4 前缀；互联网默认路由继续按用户原有的有线跃点选择。切到 `--mode lan` 或执行 `audio revert` 会只删除本工具创建的该条路由。必要时可用 `--no-wifi-local-route` 关闭此行为。诊断会核对实际广播字节和当前路由表；路由记录存在而实际路由缺失时可重新修复。
 
 定位采用指令块特征（含其后的 `jne`，保证唯一）而非硬编码偏移，已在版本升级（5.8.0.14 -> 5.8.0.74）后验证仍精确命中。等长字节替换、幂等、可还原；WiFi 态输出与出厂逐字节一致。
 
@@ -149,13 +149,41 @@ if (exception_id == CameraExceptionId.kLOCAL_CAMERA_DISABLED)
 
 > DLL 来源：@ChsBuffer
 
+## 补丁五：Windows 11 右键小米互传
+
+**目标**：Windows 11 文件和文件夹的一级右键菜单，适用于 XiaomiPCManager、PcContinuity 与 HyperConnect 的小米互传入口。扩展注册独立于电脑管家专属文件补丁。
+
+**实现**：内嵌 `XiaomiShare.ShellExt.dll`（`IExplorerCommand`）、`XiaomiShare.Helper.exe`、sparse MSIX identity、签名证书和图标。`src/patches/xiaomi_share_menu/mod.rs` 使用 `include_bytes!` 在编译期打入全部 payload；启用时无需另外下载扩展或附带目录。运行载荷释放到 `%LOCALAPPDATA%\Programs\XiaomiShareShellExt`。
+
+应用流程先准备并逐字节校验 staging，再替换受管理的载荷，导入固定指纹证书并通过 `Add-AppxPackage -ExternalLocation` 注册 sparse MSIX。临时 MSIX 与证书文件随后删除；Explorer 刷新后检查 package 版本与运行文件是否一致。检测到原版扩展时拒绝重复注册，避免两个相同菜单入口。应用失败时先注销 package，再清理受管理文件；注销失败会保留仍被注册引用的载荷和证书。
+
+还原会注销 package、删除本项目明确列出的证书、缓存和载荷，并核对清理结果。查询失败或 package / 文件不一致时报告 `Partial`，允许重新应用或还原。证书清理仅使用代码中的固定指纹名单，不以用户目录里的文本文件决定删除目标。PowerShell 使用隐藏窗口、固定系统路径、严格退出码检查和环境变量参数传递。
+
+GUI 通过后台任务执行操作与状态查询，结果只经 Slint event loop 更新控件；TUI 缓存状态，不在每次绘制时运行 PowerShell。三个前端统一调用 `ops::apply_share_menu` / `ops::revert_share_menu`；`share_menu` 模块保留兼容入口。
+
+```text
+MiPCM_CLI.exe share-menu apply
+MiPCM_CLI.exe share-menu revert
+MiPCM_CLI.exe status
+```
+
+载荷来自 `YYplus/XiaomiShareShellExt-Minimal` v1.0.2（基于 `cnbluefire/MiDropShellExtForWindows11`，MIT）。来源提交、构建 artifact、SHA-256 和许可全文见 [`NOTICE.md`](src/patches/xiaomi_share_menu/NOTICE.md)，随运行载荷释放的 `THIRD-PARTY-NOTICES.txt` 保留该声明。
+
+## Lyra SMBIOS 与地区补丁的组合还原
+
+两项补丁都修改 `micont_rtm.dll`。地区状态通过实际 `Geo\XCN` 字节判断，还原只将自己的值名恢复为 `Name`；SMBIOS 状态校验原 firmware call 的跳转目标、新节 trampoline 和同一 IAT 引用，不能只看 `.orig.bak`。
+
+SMBIOS 还原在内存中读取首次备份并同步当前地区状态，然后一次原子写回；首次备份自身已有地区补丁时，也会保留当前“已还原”的状态。重复还原无改动。跳板按 x64 ABI 对齐栈，正确计算 RIP 位移，并在空缓冲区、短缓冲区或字段不匹配时跳过替换。
+
+合成 PE 单元测试覆盖两种应用顺序、两种还原顺序、仅启用其中一项、重复应用 / 还原和错误的 call / IAT 特征，不依赖实机软件、系统 SMBIOS 或注册表。
+
 ## 安装小米电脑管家
 
-GUI 提供电脑管家 5.8.1.130、小米互联 Windows 版 1.1.2.36 和 Windows 内测版 2.0.2.524 选择，超级小爱 3.5.0.220 使用独立的一键入口。互联 Windows 版需配合 HyperOS 3 Beta 及以上手机，内测版需配合 HyperOS 4 及以上手机/平板。手动安装展开后可输入 HTTP(S) 网址或选择本地 `.exe`。下载前及启动前均校验产品共存限制：电脑管家不能与小米互联 / PcContinuity / HyperConnect 同时安装。
+GUI 安装区包含电脑管家、小米互联、超级小爱三行，统一使用产品名、选择区、一键安装、手动安装、卸载五列。只有小米互联的选择区显示 OS3 / OS4 单选按钮；不显示版本号或使用要求。电脑管家和小米互联分别保留独立的手动 URL 和本地路径，只接受对应产品的可识别安装包，选错产品在下载或启动前拒绝并记录日志。下载前及启动前均校验产品共存限制：电脑管家不能与小米互联 / PcContinuity / HyperConnect 同时安装。
 
 CLI 使用 `install --recommended [manager|continuity|hyperconnect-beta]`，省略版本选项时选择电脑管家；不带安装来源参数时保留同目录安装包扫描，未找到则提供三个内置来源、手动网址和本地路径选择。TUI 安装面板按 ↑↓ 选择四种来源，Enter 下载安装，C 取消下载。
 
-启动安装包前，工具会在安装包同目录临时准备 `msimg32.dll`，写入默认伪装机型，然后挂起启动安装器、注入代理并旁路系统版本与机型检查。安装器启动成功后，安装包目录中的临时文件会恢复为操作前的状态。
+启动安装包前，工具会在安装包同目录临时准备 `msimg32.dll`，写入默认伪装机型，然后挂起启动安装器、注入代理并旁路系统版本与机型检查。GUI 会等待安装器及其派生安装进程退出后再解除忙碌状态，并将安装包目录中的临时文件恢复为操作前状态。CLI 的原有启动并返回 PID 入口保持兼容。
 
 **URL 下载**：`infra::download` 解压并校验内嵌 aria2，仅在下载期间启动隐藏窗口的子进程，结束后退出并移除下载器临时目录。最多八路连接；进度从本次子进程的 loopback JSON-RPC 读取，不以文件大小估算。会话使用随机令牌，不读取用户 aria2 配置。URL 与路径作为 JSON 数据传入，不拼接到 PowerShell 或 shell 命令中。
 
@@ -207,12 +235,14 @@ GUI 提供内置 3.5.0.220 的一键安装；CLI 使用 `xiaoai install --recomm
 |---|---|---|
 | 安装目录与状态探测 | 枚举 `C:\Program Files\MI` 下受支持产品的版本目录，读取目标文件以判断补丁状态 | 只读，无需还原 |
 | 进程管理 | 应用或还原补丁前，按功能结束可能占用目标文件的相关进程 | 用户可重新启动对应程序；超级小爱按提示重启电脑 |
-| 地区伪装 | 修改 `micont_rtm.dll` 中读取的值名，并写入 `HKCU\Control Panel\International\Geo\XCN` | 从 `.orig.bak` 恢复 DLL，并删除 `XCN` 值 |
+| 地区伪装 | 修改 `micont_rtm.dll` 中读取的值名，并写入 `HKCU\Control Panel\International\Geo\XCN` | 仅还原地区值名字节，保留 SMBIOS，并删除 `XCN` 值 |
 | 摄像头弹窗 | 为 `PcControlCenter.dll` 追加 `.mipatch` 节并改写目标方法 RVA | 从 `.orig.bak` 恢复原 DLL |
 | 音频流转 | 等长修改 `MiPCAudio.exe` 与 `idmruntime.dll` 的三处网卡类型判断 | 从 `.orig.bak` 恢复原文件 |
-| 有线音频路由 | 在有线模式下按需创建 metric=1 的持久 Wi-Fi 本地子网路由，并在版本目录记录 `.mipcm_audio_wifi_route` | 只删除本工具有状态记录的路由和状态文件 |
+| Wi-Fi 音频路由 | 在无线模式下按需创建 metric=1 的持久 Wi-Fi 本地子网路由，并在版本目录记录 `.mipcm_audio_wifi_route` | 只删除本工具有状态记录的路由和状态文件 |
 | 设备伪装 | 向小米电脑管家版本目录部署 `msimg32.dll`，并写入 `HKCU\Software\SmartSharePatch\SpoofDevice` | 恢复或删除代理 DLL，并删除注册表值 |
 | 超级小爱 | 安装时临时部署、随后恢复安装包目录中的 `userenv.dll`；安装后向实际版本目录部署该 DLL | 根据 `.orig.bak` 恢复原文件，或删除本工具部署的 DLL |
+| Windows 11 右键小米互传 | 注册 sparse MSIX、受管理证书与本地 Shell Extension / helper 载荷 | 注销 package，清理受管理证书、缓存与载荷 |
+| Lyra SMBIOS | 为 firmware call 追加 trampoline，并重定向该 call | 还原 SMBIOS 修改，同时保留当前地区补丁状态 |
 | 安装包下载 | 在 Windows 临时目录中以独立缓存和 `.part` / `.aria2` / `.download.meta` 管理下载，完成后保存为 `.exe`；推荐版校验固定 SHA-256 | 缓存保留时可取消并续传；缓存可由 Windows 临时文件清理或手动删除 |
 | 产品卸载 | 经用户确认后运行产品自带卸载程序；相关入口还可删除已知服务、残留目录或 MiDrop Ext MSIX，并在需要时重启资源管理器 | 属于不可逆操作，执行前由界面要求确认 |
 
@@ -222,10 +252,9 @@ GUI 提供内置 3.5.0.220 的一键安装；CLI 使用 `xiaoai install --recomm
 
 GUI 使用 Slint 声明式界面构建。主要布局：
 
-- **安装状态区**：显示当前安装位置和各补丁状态
-- **补丁操作区**：应用 / 还原按钮，含机型选择下拉框和自定义输入
-- **安装区**：提供内置版本选择及一键下载，展开手动来源后选择本地 `.exe` 或输入地址；下载进度在事件线程更新，下载及安装任务在后台运行
-- **日志区**：实时显示操作日志
+- **补丁操作区**：状态通过应用 / 还原按钮的可用性体现；读取真实伪装机型，已伪装时锁定选择，不显示状态文字列
+- **安装区**：三行固定列对齐，无行间分隔线；OS3 / OS4 为紧凑单选按钮；电脑管家与小米互联检测到任意一个后，两者安装入口都禁用，超级小爱独立判断。手动来源独立，后台下载 / 安装，忙碌状态保持至安装器退出
+- **日志区**：左栏只保留纵向撑满的运行日志与清空日志按钮
 
 界面声明位于 `src/ui/app.slint`，Rust 侧事件与异步任务编排位于 `src/ui/gui/app.rs`。
 
@@ -235,6 +264,7 @@ GUI 使用 Slint 声明式界面构建。主要布局：
 src/
 ├── lib.rs                       # 核心库入口，聚合各模块
 ├── ops.rs                       # 高层操作（apply/revert/status/install）
+├── share_menu.rs                # 右键菜单高层操作兼容入口
 ├── elevate.rs                   # 管理员提权兜底
 ├── infra/                       # PE、字节、注册表、PowerShell、下载基础设施
 ├── patches/
@@ -242,7 +272,11 @@ src/
 │   ├── camera/                  # 摄像头弹窗抑制与 .NET 方法体处理
 │   ├── audio/mod.rs             # 音频流转与 Wi-Fi 本地路由
 │   ├── device/                  # 设备伪装及内嵌 msimg32.dll
-│   └── ai/                      # 超级小爱及内嵌 userenv.dll
+│   ├── ai/                      # 超级小爱及内嵌 userenv.dll
+│   └── xiaomi_share_menu/        # Windows 11 IExplorerCommand / sparse MSIX
+│       ├── mod.rs               # 状态、应用、还原及失败清理
+│       ├── NOTICE.md            # payload 来源、哈希与 MIT attribution
+│       └── bin/                 # 内嵌扩展、helper、MSIX、证书和图标
 ├── install/
 │   ├── mod.rs                   # 通用安装目录、进程和文件操作
 │   ├── pc_manager_installer.rs  # 小米电脑管家安装
@@ -269,7 +303,7 @@ release 产物路径：
 
 release 产物会嵌入 `resources/mipcm_patch.exe.manifest` 与 `resources/mipcm_gui.exe.manifest`，其中声明 `requestedExecutionLevel=requireAdministrator`。因此从资源管理器双击 exe 时，Windows 会在程序启动前弹出 UAC。
 
-构建时 `src/patches/device/mod.rs` 与 `src/patches/ai/mod.rs` 分别通过 `include_bytes!` 内嵌 `src/patches/device/dlls/msimg32.dll` 和 `src/patches/ai/dlls/userenv.dll`，两个文件均需存在。
+构建时 `src/patches/device/mod.rs` 与 `src/patches/ai/mod.rs` 分别通过 `include_bytes!` 内嵌 `src/patches/device/dlls/msimg32.dll` 和 `src/patches/ai/dlls/userenv.dll`，两个文件均需存在。右键菜单模块还通过 `include_bytes!` 内嵌 `src/patches/xiaomi_share_menu/bin/` 的全部载荷和 `NOTICE.md`，构建时也必须保留这些文件。
 
 可通过 `MIPCM_SKIP_GUI_MANIFEST=1` 跳过 GUI manifest 嵌入（使用 `mipcm_gui_test.rc`，不强制管理员，便于本机无 UAC 冒烟测试）。
 
@@ -286,4 +320,5 @@ release 产物会嵌入 `resources/mipcm_patch.exe.manifest` 与 `resources/mipc
 
 - Coolapk @Na1veMagic：地区伪装实现思路
 - @ChsBuffer：设备伪装所用 `msimg32.dll`
+- @cnbluefire：Windows 11 小米互传 Shell Extension 原始实现（MIT）；集成的精简载荷来自 `YYplus/XiaomiShareShellExt-Minimal` v1.0.2
 - 感谢提供超级小爱专用 `userenv.dll`、整理安装补丁教程并完成实机验证的社区用户

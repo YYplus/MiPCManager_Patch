@@ -16,8 +16,7 @@ use crate::{
     experimental::audio_dual_nic,
     i18n::{self, Lang},
     ops::{self, BroadcastMode},
-    patches::{device::PRESETS, xiaomi_share_menu},
-    share_menu,
+    patches::device::PRESETS,
 };
 
 use super::{theme, widgets};
@@ -28,6 +27,12 @@ pub enum LogMessage {
     DownloadProgress(ops::DownloadProgress),
     Done,
     Error(String),
+    Status {
+        generation: u64,
+        lines: Vec<String>,
+        full_features: bool,
+        share_state: ops::ShellMenuState,
+    },
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────
@@ -96,10 +101,7 @@ impl PatchRow {
     fn label(&self, lang: Lang) -> &'static str {
         match self {
             PatchRow::Locale => i18n::tr("patch.locale.detail", lang),
-            PatchRow::ShareMenu => match lang {
-                Lang::Zh => "Windows 11 右键小米互传",
-                Lang::En => "Windows 11 Xiaomi Share Menu",
-            },
+            PatchRow::ShareMenu => i18n::tr("patch.share-menu.detail", lang),
             PatchRow::Camera => i18n::tr("patch.camera.detail", lang),
             PatchRow::Audio => i18n::tr("patch.audio.detail", lang),
             PatchRow::Device => i18n::tr("patch.device.detail", lang),
@@ -112,10 +114,7 @@ impl PatchRow {
     fn desc(&self, lang: Lang) -> &'static str {
         match self {
             PatchRow::Locale => i18n::tr("patch.locale.desc", lang),
-            PatchRow::ShareMenu => match lang {
-                Lang::Zh => "在文件和文件夹一级右键菜单中添加“使用小米互传发送”",
-                Lang::En => "Add Send with Xiaomi Share to the first-level context menu",
-            },
+            PatchRow::ShareMenu => i18n::tr("patch.share-menu.desc", lang),
             PatchRow::Camera => i18n::tr("patch.camera.desc", lang),
             PatchRow::Audio => i18n::tr("patch.audio.desc", lang),
             PatchRow::Device => i18n::tr("patch.device.desc", lang),
@@ -158,20 +157,12 @@ impl PatchRow {
                 });
             }
             (PatchRow::ShareMenu, 0) => {
-                let label = match lang {
-                    Lang::Zh => "右键小米互传 · 应用",
-                    Lang::En => "Xiaomi Share Menu · Apply",
-                }
-                .to_string();
-                spawn_op(tx.clone(), label, lang, share_menu::apply);
+                let label = i18n::tr("tui.op.share-menu.apply", lang).to_string();
+                spawn_op(tx.clone(), label, lang, ops::apply_share_menu);
             }
             (PatchRow::ShareMenu, 1) => {
-                let label = match lang {
-                    Lang::Zh => "右键小米互传 · 还原",
-                    Lang::En => "Xiaomi Share Menu · Revert",
-                }
-                .to_string();
-                spawn_op(tx.clone(), label, lang, share_menu::revert);
+                let label = i18n::tr("tui.op.share-menu.revert", lang).to_string();
+                spawn_op(tx.clone(), label, lang, ops::revert_share_menu);
             }
             (PatchRow::Camera, 0) => {
                 let label = i18n::tr("tui.op.camera.apply", lang).to_string();
@@ -228,13 +219,13 @@ impl PatchRow {
                 spawn_op(tx.clone(), label, lang, || ops::revert_smbios(None, false));
             }
             (PatchRow::DualNic, 0) => {
-                let label = "双网卡诊断".to_string();
+                let label = i18n::tr("tui.op.dualnic.diagnose", lang).to_string();
                 spawn_op(tx.clone(), label, lang, || {
                     audio_dual_nic::diagnose(&ops::resolve_full_version_dir()?)
                 });
             }
             (PatchRow::DualNic, 1) => {
-                let label = "双网卡修复".to_string();
+                let label = i18n::tr("tui.op.dualnic.fix", lang).to_string();
                 spawn_op(tx.clone(), label, lang, || {
                     audio_dual_nic::auto_fix(&ops::resolve_full_version_dir()?)
                 });
@@ -297,6 +288,9 @@ pub struct App {
 
     status_lines: Vec<String>,
     full_features: bool,
+    share_menu_state: ops::ShellMenuState,
+    status_refreshing: bool,
+    status_generation: u64,
 
     log: Vec<String>,
     op_running: bool,
@@ -323,6 +317,9 @@ impl App {
             confirm_mode: None,
             status_lines: Vec::new(),
             full_features: false,
+            share_menu_state: ops::ShellMenuState::Partial,
+            status_refreshing: false,
+            status_generation: 0,
             log: Vec::new(),
             op_running: false,
             op_label: String::new(),
@@ -508,20 +505,13 @@ impl App {
             }
             KeyCode::Enter => {
                 let patch = PatchRow::all()[self.patch_idx];
-                if patch == PatchRow::ShareMenu {
-                    self.op_running = true;
-                    self.op_label = match self.patch_btn_idx {
-                        0 => match self.lang {
-                            Lang::Zh => "右键小米互传 · 应用",
-                            Lang::En => "Xiaomi Share Menu · Apply",
-                        },
-                        _ => match self.lang {
-                            Lang::Zh => "右键小米互传 · 还原",
-                            Lang::En => "Xiaomi Share Menu · Revert",
-                        },
-                    }
-                    .to_string();
-                }
+                self.op_running = true;
+                self.status_generation += 1;
+                self.op_label = format!(
+                    "{} · {}",
+                    patch.label(self.lang),
+                    patch.btn_labels(self.lang)[self.patch_btn_idx]
+                );
                 let tx = self.tx.clone();
                 patch.btn_execute(self.patch_btn_idx, self, self.lang, &tx);
             }
@@ -667,15 +657,22 @@ impl App {
     }
 
     fn refresh_status(&mut self) {
-        self.status_lines = ops::status_lines();
-        let share_state = match xiaomi_share_menu::current_state() {
-            xiaomi_share_menu::ShellMenuState::Enabled => "已启用",
-            xiaomi_share_menu::ShellMenuState::Disabled => "未启用",
-            xiaomi_share_menu::ShellMenuState::Partial => "状态不完整",
-        };
-        self.status_lines
-            .push(format!("Windows 11 右键小米互传: {share_state}"));
-        self.full_features = ops::full_features_available();
+        self.status_generation += 1;
+        if self.status_refreshing || self.op_running {
+            return;
+        }
+        self.status_refreshing = true;
+        let generation = self.status_generation;
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let share_state = ops::share_menu_state();
+            let _ = tx.send(LogMessage::Status {
+                generation,
+                lines: ops::status_lines_with_share_state(share_state),
+                full_features: ops::full_features_available(),
+                share_state,
+            });
+        });
     }
 
     fn drain_log(&mut self, rx: &Receiver<LogMessage>) {
@@ -710,6 +707,21 @@ impl App {
                     self.download_control = None;
                     self.log_scroll = self.log.len().saturating_sub(1);
                     self.refresh_status();
+                }
+                Ok(LogMessage::Status {
+                    generation,
+                    lines,
+                    full_features,
+                    share_state,
+                }) => {
+                    self.status_refreshing = false;
+                    if generation == self.status_generation && !self.op_running {
+                        self.status_lines = lines;
+                        self.full_features = full_features;
+                        self.share_menu_state = share_state;
+                    } else {
+                        self.refresh_status();
+                    }
                 }
                 Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
             }
@@ -900,10 +912,10 @@ impl App {
                     ])]
                 }
                 PatchRow::ShareMenu => {
-                    let state = match xiaomi_share_menu::current_state() {
-                        xiaomi_share_menu::ShellMenuState::Enabled => "已启用",
-                        xiaomi_share_menu::ShellMenuState::Disabled => "未启用",
-                        xiaomi_share_menu::ShellMenuState::Partial => "状态不完整，可重新应用修复",
+                    let state = match self.share_menu_state {
+                        ops::ShellMenuState::Enabled => "已启用",
+                        ops::ShellMenuState::Disabled => "未启用",
+                        ops::ShellMenuState::Partial => "状态不完整，可重新应用修复",
                     };
                     vec![Line::from(Span::styled(
                         format!("  当前状态: {state}"),

@@ -11,7 +11,7 @@
 //! 3. 不匹配时自动创建或移除路由，使发现身份与媒体出站统一
 
 use crate::patches::audio;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::path::Path;
 
 /// 双网卡诊断结果。
@@ -31,6 +31,24 @@ pub struct DualNicDiagnosis {
     pub consistent: bool,
 }
 
+/// Whether the actual broadcast bytes and live route need adjustment.
+/// Unknown or mixed bytes are diagnosed, but never changed automatically.
+pub fn repair_needed(version_dir: &Path) -> Result<bool> {
+    let wifi = broadcast_is_wifi(version_dir)?;
+    Ok(wifi != audio::wifi_route_present(version_dir)?)
+}
+
+fn broadcast_is_wifi(version_dir: &Path) -> Result<bool> {
+    let states = audio::current_state(version_dir);
+    if !states.is_empty() && states.iter().all(|(_, state)| state.contains("WiFi")) {
+        return Ok(true);
+    }
+    if !states.is_empty() && states.iter().all(|(_, state)| state.contains("LAN")) {
+        return Ok(false);
+    }
+    bail!("音频广播字节不可读或模式不一致，请先选择 WiFi / LAN 模式后重新诊断");
+}
+
 /// 诊断当前双网卡状态，返回可展示的诊断信息行。
 pub fn diagnose(version_dir: &Path) -> Result<Vec<String>> {
     let mut log = Vec::new();
@@ -43,13 +61,15 @@ pub fn diagnose(version_dir: &Path) -> Result<Vec<String>> {
     }
 
     let first_state = &states[0].1;
-    let mode_is_wifi = first_state.contains("无线") || first_state.contains("WiFi");
-    let mode_is_lan = first_state.contains("有线") || first_state.contains("LAN");
+    let wifi = broadcast_is_wifi(version_dir)?;
+    let mode_is_wifi = wifi;
+    let mode_is_lan = !wifi;
     log.push(format!("  当前广播模式: {first_state}"));
 
     let route_state = audio::wifi_route_state(version_dir);
-    let route_active = !route_state.contains("未配置");
+    let route_active = audio::wifi_route_present(version_dir)?;
     log.push(format!("  Wi-Fi 优先路由: {}", route_state));
+    log.push(format!("  实际路由存在: {route_active}"));
 
     let consistent = match (mode_is_wifi, mode_is_lan, route_active) {
         (true, _, true) | (_, true, false) => {
@@ -107,7 +127,7 @@ pub fn auto_fix(version_dir: &Path) -> Result<Vec<String>> {
     }
 
     let first_state = &states[0].1;
-    let mode_is_wifi = first_state.contains("无线") || first_state.contains("WiFi");
+    let mode_is_wifi = broadcast_is_wifi(version_dir)?;
     log.push(format!("  当前广播模式: {first_state}"));
 
     if mode_is_wifi {

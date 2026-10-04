@@ -196,7 +196,10 @@ pub fn apply_wifi_route(version_dir: &Path) -> Result<Option<bool>> {
     let state_path = wifi_route_state_path(version_dir);
 
     if let Some(existing) = read_wifi_route_state(&state_path)? {
-        if existing.interface_index == subnet.interface_index && existing.prefix == subnet.prefix {
+        if existing.interface_index == subnet.interface_index
+            && existing.prefix == subnet.prefix
+            && wifi_route_present(version_dir)?
+        {
             return Ok(Some(false));
         }
         remove_route(&existing)?;
@@ -238,6 +241,23 @@ pub fn wifi_route_state(version_dir: &Path) -> String {
         ),
         Ok(None) => "未配置".to_string(),
         Err(error) => format!("状态不可读（{error}）"),
+    }
+}
+
+/// Check the live routing table, rather than treating a saved record as a route.
+pub fn wifi_route_present(version_dir: &Path) -> Result<bool> {
+    let Some(route) = read_wifi_route_state(&wifi_route_state_path(version_dir))? else {
+        return Ok(false);
+    };
+    let script = format!(
+        "$route = Get-NetRoute -AddressFamily IPv4 -PolicyStore ActiveStore -ErrorAction Stop | Where-Object {{ $_.DestinationPrefix -eq '{}' -and $_.InterfaceIndex -eq {} -and $_.NextHop -eq '0.0.0.0' -and $_.RouteMetric -eq {} }} | Select-Object -First 1; if ($null -eq $route) {{ '0' }} else {{ '1' }}",
+        route.prefix, route.interface_index, WIFI_ROUTE_METRIC
+    );
+    let output = crate::infra::powershell::run_powershell_strict(&script)?;
+    match output.trim() {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        other => bail!("Wi-Fi 路由查询返回异常结果：{other:?}"),
     }
 }
 

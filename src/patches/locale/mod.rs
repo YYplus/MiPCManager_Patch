@@ -42,7 +42,7 @@ pub fn patch_bytes(data: &mut [u8]) -> Result<PatchOutcome> {
 ///
 /// `micont_rtm.dll` 还可能同时承载 Lyra SMBIOS 补丁，因此这里不能再直接恢复
 /// `.orig.bak`，否则会把另一个独立补丁一并清掉。
-fn revert_bytes(data: &mut [u8]) -> Result<bool> {
+pub(crate) fn revert_bytes(data: &mut [u8]) -> Result<bool> {
     let orig_sig = [ANCHOR_GEO, ORIG_NAME].concat();
     let patched_sig = [ANCHOR_GEO, PATCHED_NAME].concat();
 

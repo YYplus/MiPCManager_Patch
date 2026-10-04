@@ -106,6 +106,9 @@ tr_table!(tr_zh, {
 
     // ── 补丁标签 ──
     "patch.locale" => "地区伪装",
+    "patch.share-menu" => "右键小米互传",
+    "patch.share-menu.detail" => "Windows 11 右键小米互传",
+    "patch.share-menu.desc" => "在文件和文件夹一级右键菜单中添加“使用小米互传发送”",
     "patch.camera" => "摄像头弹窗",
     "patch.audio" => "音频流转",
     "patch.device" => "设备伪装",
@@ -205,7 +208,10 @@ tr_table!(tr_zh, {
     "install.requirement.continuity" => "需配合 Xiaomi HyperOS 3 Beta 及以上手机使用",
     "install.requirement.hyperconnect-beta" => "需配合 Xiaomi HyperOS 4 及以上手机/平板使用",
     "install.requirement.installer" => "下载完成后，请按安装窗口提示完成安装",
-    "install.one-click" => "一键下载安装",
+    "install.one-click" => "一键安装",
+    "install.row.manager" => "小米电脑管家",
+    "install.row.continuity" => "小米互联",
+    "install.row.xiaoai" => "超级小爱",
     "install.manual" => "手动安装",
     "install.hide-manual" => "收起手动安装",
     "install.cancel-download" => "取消下载",
@@ -220,6 +226,8 @@ tr_table!(tr_zh, {
 
     // ── GUI 安装操作标签 ──
     "gui.op.locale.apply" => "地区伪装",
+    "gui.op.share-menu.apply" => "右键小米互传 · 应用",
+    "gui.op.share-menu.revert" => "右键小米互传 · 还原",
     "gui.op.locale.revert" => "地区伪装·还原",
     "gui.op.device.apply" => "设备伪装({model})",
     "gui.op.device.revert" => "设备伪装·还原",
@@ -322,6 +330,8 @@ tr_table!(tr_zh, {
 
     // ── TUI 操作标签 ──
     "tui.op.locale.apply" => "地区伪装 · 应用",
+    "tui.op.share-menu.apply" => "右键小米互传 · 应用",
+    "tui.op.share-menu.revert" => "右键小米互传 · 还原",
     "tui.op.locale.revert" => "地区伪装 · 还原",
     "tui.op.camera.apply" => "摄像头弹窗抑制 · 应用",
     "tui.op.camera.revert" => "摄像头弹窗抑制 · 还原",
@@ -414,6 +424,9 @@ tr_table!(tr_en, {
 
     // ── 补丁标签 ──
     "patch.locale" => "Locale Spoof",
+    "patch.share-menu" => "Xiaomi Share Menu",
+    "patch.share-menu.detail" => "Windows 11 Xiaomi Share Menu",
+    "patch.share-menu.desc" => "Add Send with Xiaomi Share to the first-level file and folder context menu",
     "patch.camera" => "Camera Toast",
     "patch.audio" => "Audio Stream",
     "patch.device" => "Device Spoof",
@@ -513,7 +526,10 @@ tr_table!(tr_en, {
     "install.requirement.continuity" => "Requires a phone running Xiaomi HyperOS 3 Beta or later",
     "install.requirement.hyperconnect-beta" => "Requires a phone/tablet running Xiaomi HyperOS 4 or later",
     "install.requirement.installer" => "After downloading, follow the installer window to finish setup",
-    "install.one-click" => "Download & Install",
+    "install.one-click" => "One-click Install",
+    "install.row.manager" => "MiPCManager",
+    "install.row.continuity" => "Xiaomi Interconnectivity",
+    "install.row.xiaoai" => "Super XiaoAI",
     "install.manual" => "Manual Install",
     "install.hide-manual" => "Hide Manual Install",
     "install.cancel-download" => "Cancel Download",
@@ -528,6 +544,8 @@ tr_table!(tr_en, {
 
     // ── GUI 安装操作标签 ──
     "gui.op.locale.apply" => "Locale Spoof",
+    "gui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
+    "gui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",
     "gui.op.locale.revert" => "Locale Spoof · Revert",
     "gui.op.device.apply" => "Device Spoof({model})",
     "gui.op.device.revert" => "Device Spoof · Revert",
@@ -630,6 +648,8 @@ tr_table!(tr_en, {
 
     // ── TUI 操作标签 ──
     "tui.op.locale.apply" => "Locale Spoof · Apply",
+    "tui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
+    "tui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",
     "tui.op.locale.revert" => "Locale Spoof · Revert",
     "tui.op.camera.apply" => "Camera Toast · Apply",
     "tui.op.camera.revert" => "Camera Toast · Revert",
@@ -682,3 +702,29 @@ tr_table!(tr_en, {
     // ── Ops 模块 ──
     "ops.restart.hint" => "Hint: Patches applied. Please restart MiPCManager manually for changes to take effect.",
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn share_menu_and_install_rows_have_both_languages() {
+        for key in [
+            "patch.share-menu",
+            "patch.share-menu.detail",
+            "patch.share-menu.desc",
+            "gui.op.share-menu.apply",
+            "gui.op.share-menu.revert",
+            "tui.op.share-menu.apply",
+            "tui.op.share-menu.revert",
+            "install.row.manager",
+            "install.row.continuity",
+            "install.row.xiaoai",
+            "install.one-click",
+        ] {
+            for lang in [Lang::Zh, Lang::En] {
+                assert_ne!(tr(key, lang), key, "missing translation: {key}");
+            }
+        }
+    }
+}

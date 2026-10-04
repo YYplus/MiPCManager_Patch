@@ -32,7 +32,6 @@ use crate::infra::powershell::run_powershell;
 
 /// 检测 MiDrop Ext MSIX 包是否已安装。
 /// 返回 `Some(PackageFullName)` 或 `None`。
-#[cfg(windows)]
 pub fn detect_msix() -> Result<Option<String>> {
     let script = format!(
         "Get-AppxPackage -Name '{MSIX_PACKAGE_NAME}' | Select-Object -ExpandProperty PackageFullName"
@@ -116,7 +115,9 @@ pub fn run_product_uninstaller(uninstall_exe: &Path) -> Result<bool> {
         .with_context(|| format!("无法启动卸载程序：{}", uninstall_exe.display()))?
         .wait()
         .context("等待卸载程序退出时出错")?;
-    let _ = status;
+    if !status.success() && uninstall_exe.is_file() {
+        bail!("卸载程序未成功完成（退出码：{status}），已停止后续清理");
+    }
 
     if !uninstall_exe.is_file() {
         return Ok(true);
@@ -161,13 +162,12 @@ pub fn uninstall_xiaomi_pc_manager(root: &Path, log: &mut Vec<String>) -> Result
     log.push(format!("  正在运行卸载程序：{}", uninstall_exe.display()));
     let removed = run_product_uninstaller(&uninstall_exe)?;
     if !removed {
-        log.push(format!(
-            "  ⚠ 卸载程序未删除自身，卸载可能未完成：{}",
+        bail!(
+            "主程序卸载未完成，已停止服务和文件清理：{}",
             uninstall_exe.display()
-        ));
-    } else {
-        log.push("  ✓ 主程序卸载完成".to_string());
+        );
     }
+    log.push("  ✓ 主程序卸载完成".to_string());
 
     // 2. 卸载 AIService
     uninstall_sub_product(log, r"C:\Program Files\MI\AIService", "AIService");
@@ -213,13 +213,12 @@ pub fn uninstall_pc_continuity(root: &Path, log: &mut Vec<String>) -> Result<()>
     log.push(format!("  正在运行卸载程序：{}", uninstall_exe.display()));
     let removed = run_product_uninstaller(&uninstall_exe)?;
     if !removed {
-        log.push(format!(
-            "  ⚠ 卸载程序未删除自身，卸载可能未完成：{}",
+        bail!(
+            "主程序卸载未完成，已停止服务和文件清理：{}",
             uninstall_exe.display()
-        ));
-    } else {
-        log.push("  ✓ 主程序卸载完成".to_string());
+        );
     }
+    log.push("  ✓ 主程序卸载完成".to_string());
 
     // 2. 删除服务
     log.push("  正在移除服务…".to_string());

@@ -43,7 +43,11 @@ pub fn find_xiaoai_root() -> Option<PathBuf> {
 /// - 新版 HyperConnect 2.0：`<版本目录>\resources\native-interconnect\win32`
 /// - 旧版 PcContinuity / XiaomiPCManager：版本目录自身
 pub fn runtime_native_dir(version_dir: &Path) -> PathBuf {
-    let nested = version_dir.join(HYPERCONNECT_NATIVE_REL);
+    let nested = HYPERCONNECT_NATIVE_REL
+        .split('\\')
+        .fold(version_dir.to_path_buf(), |path, component| {
+            path.join(component)
+        });
     if nested.is_dir() {
         nested
     } else {

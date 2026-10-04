@@ -8,8 +8,7 @@ use mipcmanager_patch::{
     i18n,
     install::pc_manager_installer,
     ops,
-    patches::{device as device_spoof, xiaomi_share_menu},
-    share_menu,
+    patches::device as device_spoof,
 };
 use std::path::{Path, PathBuf};
 
@@ -290,14 +289,7 @@ fn main() {
 fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
     match cmd {
         Command::Status => {
-            let mut lines = ops::status_lines();
-            let share_state = match xiaomi_share_menu::current_state() {
-                xiaomi_share_menu::ShellMenuState::Enabled => "已启用",
-                xiaomi_share_menu::ShellMenuState::Disabled => "未启用",
-                xiaomi_share_menu::ShellMenuState::Partial => "状态不完整（可重新应用修复）",
-            };
-            lines.push(format!("Windows 11 右键小米互传: {share_state}"));
-            print_log(lines);
+            print_log(ops::status_lines());
             Ok(())
         }
         Command::Locale {
@@ -383,11 +375,11 @@ fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
         },
         Command::ShareMenu { action } => match action {
             ShareMenuAction::Apply => {
-                print_log(share_menu::apply()?);
+                print_log(ops::apply_share_menu()?);
                 Ok(())
             }
             ShareMenuAction::Revert => {
-                print_log(share_menu::revert()?);
+                print_log(ops::revert_share_menu()?);
                 Ok(())
             }
         },
