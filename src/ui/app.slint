@@ -123,23 +123,11 @@ export component AppWindow inherits Window {
             VerticalLayout {
                 min-width: 320px;
                 preferred-width: 360px;
-                spacing: 10px;
 
                 Rectangle {
                     border-radius: 10px;
                     border-width: 1px;
-                    VerticalLayout {
-                        padding: 16px;
-                        spacing: 8px;
-                        Text { text: root.tr("section.status"); font-weight: 700; }
-                        TextEdit { text <=> root.status-text; read-only: true; min-height: 60px; }
-                        if !root.full-features: Text { text: root.tr("gui.warn.no_full"); }
-                    }
-                }
-
-                Rectangle {
-                    border-radius: 10px;
-                    border-width: 1px;
+                    vertical-stretch: 1;
                     VerticalLayout {
                         padding: 16px;
                         spacing: 8px;
@@ -151,7 +139,7 @@ export component AppWindow inherits Window {
                             }
                         }
                         if root.last-error != "": Text { text: root.tr("gui.warn.recent_error") + root.last-error; color: #dc3730; font-size: 16px; }
-                        TextEdit { text <=> root.log-text; read-only: true; min-height: 100px; preferred-height: 200px; viewport-y <=> root.log-viewport-y; }
+                        TextEdit { text <=> root.log-text; read-only: true; min-height: 100px; vertical-stretch: 1; viewport-y <=> root.log-viewport-y; }
                     }
                 }
             }
@@ -323,7 +311,7 @@ export component AppWindow inherits Window {
                                     Button {
                                         height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install");
                                         enabled: !root.downloading && root.manager-path-input != "";
-                                        clicked => { root.start-manager-install(root.manager-path-input); }
+                                        clicked => { root.start-manager_install(root.manager_path_input); }
                                     }
                                 }
                             }
