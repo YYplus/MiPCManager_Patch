@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use anyhow::Result;
-use mipcmanager_patch::{elevate, i18n, ops, patches::device as ds};
+use mipcmanager_patch::{elevate, i18n, install, ops, patches::device as ds};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 #[cfg(windows)]
 use std::cell::RefCell;
@@ -65,6 +65,7 @@ fn main() {
 fn refresh(app: &AppWindow) {
     let full = ops::full_features_available();
     app.set_full_features(full);
+    app.set_continuity_available(install::find_pc_continuity_root().is_some());
     app.set_xiaoai_available(ops::xiaoai_available());
     let status = ops::status_lines().join("\n");
     app.set_status_text(status.into());
