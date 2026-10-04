@@ -4,11 +4,8 @@ use anyhow::{Context, Result, bail};
 use mipcmanager_patch::{
     elevate,
     experimental::smbios_spoof,
-    i18n,
-    infra::pe::PeImage,
-    install,
-    ops,
-    patches::{ai, audio, camera, device as ds, locale},
+    i18n, install, ops,
+    patches::{ai, audio, camera, device as ds, locale, xiaomi_share_menu},
     uninstall,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -47,18 +44,6 @@ fn main() {
             ("install.row.continuity", i18n::Lang::En) => "Xiaomi Interconnectivity".into(),
             ("install.row.xiaoai", i18n::Lang::Zh) => "超级小爱".into(),
             ("install.row.xiaoai", i18n::Lang::En) => "Super XiaoAI".into(),
-            ("state.applied", i18n::Lang::Zh) => "已应用".into(),
-            ("state.applied", i18n::Lang::En) => "Applied".into(),
-            ("state.not-applied", i18n::Lang::Zh) => "未应用".into(),
-            ("state.not-applied", i18n::Lang::En) => "Not applied".into(),
-            ("state.fixed", i18n::Lang::Zh) => "已修复".into(),
-            ("state.fixed", i18n::Lang::En) => "Fixed".into(),
-            ("state.needs-fix", i18n::Lang::Zh) => "待修复".into(),
-            ("state.needs-fix", i18n::Lang::En) => "Needs fix".into(),
-            ("state.not-configured", i18n::Lang::Zh) => "未配置".into(),
-            ("state.not-configured", i18n::Lang::En) => "Not configured".into(),
-            ("state.unknown", i18n::Lang::Zh) => "状态异常".into(),
-            ("state.unknown", i18n::Lang::En) => "Unknown".into(),
             _ => i18n::tr(&key, lang).into(),
         }
     });
@@ -103,16 +88,6 @@ fn current_locale_dll() -> Option<PathBuf> {
     Some(install::runtime_native_dir(&version).join(locale::TARGET_DLL))
 }
 
-fn locale_is_patched(path: &Path) -> bool {
-    let Ok(mut data) = fs::read(path) else {
-        return false;
-    };
-    matches!(
-        locale::patch_bytes(&mut data),
-        Ok(locale::PatchOutcome::AlreadyPatched)
-    )
-}
-
 fn differs_from_backup(path: &Path) -> bool {
     let backup = install::backup_path(path);
     let (Ok(current), Ok(original)) = (fs::read(path), fs::read(backup)) else {
@@ -143,19 +118,6 @@ fn audio_route_active(version: &Path) -> bool {
     !state.contains("未配置") && !state.contains("状态不可读")
 }
 
-fn smbios_is_patched(path: &Path) -> bool {
-    let Ok(data) = fs::read(path) else {
-        return false;
-    };
-    let Ok(pe) = PeImage::parse(data) else {
-        return false;
-    };
-    let Ok((_, iat_rva, _)) = pe.find_iat_entry("kernel32", "GetSystemFirmwareTable") else {
-        return false;
-    };
-    install::backup_path(path).exists() && pe.find_call_to_iat(iat_rva).is_err()
-}
-
 fn sync_device_model(app: &AppWindow, model: &str) {
     if let Some(index) = ds::PRESETS.iter().position(|preset| preset.code == model) {
         app.set_custom_mode(false);
@@ -177,7 +139,7 @@ fn refresh(app: &AppWindow) {
 
     let locale_active = current_locale_dll()
         .as_deref()
-        .is_some_and(locale_is_patched);
+        .is_some_and(locale::is_patched);
     app.set_locale_active(locale_active);
 
     app.set_device_active(false);
@@ -220,13 +182,20 @@ fn refresh(app: &AppWindow) {
         app.set_dual_nic_state(dual_state);
 
         let smbios_path = version.join(smbios_spoof::TARGET_DLL);
-        app.set_smbios_active(smbios_is_patched(&smbios_path));
+        app.set_smbios_active(smbios_spoof::is_patched(&smbios_path));
     }
 
     let xiaoai_patch_active = install::find_xiaoai_root()
         .and_then(|root| install::latest_version_dir(&root).ok())
         .is_some_and(|version| ai::current_state(&version));
     app.set_xiaoai_patch_active(xiaoai_patch_active);
+
+    let share_state = match xiaomi_share_menu::current_state() {
+        xiaomi_share_menu::ShellMenuState::Disabled => 0,
+        xiaomi_share_menu::ShellMenuState::Enabled => 1,
+        xiaomi_share_menu::ShellMenuState::Partial => 2,
+    };
+    app.set_share_menu_state(share_state);
 }
 
 fn append_log(app: &AppWindow, label: &str, result: Result<Vec<String>>) {
@@ -253,6 +222,32 @@ fn append_log(app: &AppWindow, label: &str, result: Result<Vec<String>>) {
 
 fn run_patch(app: &AppWindow, label: &str, f: impl FnOnce() -> Result<Vec<String>>) {
     append_log(app, label, f());
+}
+
+fn apply_xiaomi_share_menu() -> Result<Vec<String>> {
+    let outcome = xiaomi_share_menu::apply()?;
+    Ok(vec![match outcome {
+        xiaomi_share_menu::PatchOutcome::Applied => {
+            "✓ 已启用 Windows 11 一级右键“使用小米互传发送”".to_string()
+        }
+        xiaomi_share_menu::PatchOutcome::AlreadyApplied => {
+            "• Windows 11 右键小米互传已启用（跳过）".to_string()
+        }
+        _ => "• 右键小米互传状态未变化".to_string(),
+    }])
+}
+
+fn revert_xiaomi_share_menu() -> Result<Vec<String>> {
+    let outcome = xiaomi_share_menu::revert()?;
+    Ok(vec![match outcome {
+        xiaomi_share_menu::PatchOutcome::Reverted => {
+            "✓ 已关闭 Windows 11 一级右键小米互传并清理相关组件".to_string()
+        }
+        xiaomi_share_menu::PatchOutcome::AlreadyReverted => {
+            "• Windows 11 右键小米互传已关闭（跳过）".to_string()
+        }
+        _ => "• 右键小米互传状态未变化".to_string(),
+    }])
 }
 
 fn ensure_manual_installer_kind(
@@ -404,6 +399,23 @@ fn spawn_install_operation(
 }
 
 #[cfg(windows)]
+fn spawn_xiaomi_share_operation(
+    app_weak: slint::Weak<AppWindow>,
+    label: String,
+    operation: impl FnOnce() -> Result<Vec<String>> + Send + 'static,
+) {
+    std::thread::spawn(move || {
+        let result = operation();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(app) = app_weak.upgrade() {
+                app.set_share_menu_busy(false);
+                append_log(&app, &label, result);
+            }
+        });
+    });
+}
+
+#[cfg(windows)]
 fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     use install::pc_manager_installer::InstallerKind;
 
@@ -414,6 +426,37 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_refresh({
         let app_weak = app_weak.clone();
         move || refresh(&app_weak.unwrap())
+    });
+
+    app.on_apply_xiaomi_share_menu({
+        let app_weak = app_weak.clone();
+        move || {
+            let app = app_weak.unwrap();
+            if app.get_share_menu_busy() {
+                return;
+            }
+            app.set_share_menu_busy(true);
+            spawn_xiaomi_share_operation(
+                app_weak.clone(),
+                i18n::tr("gui.op.share-menu.apply", lang).to_string(),
+                apply_xiaomi_share_menu,
+            );
+        }
+    });
+    app.on_revert_xiaomi_share_menu({
+        let app_weak = app_weak.clone();
+        move || {
+            let app = app_weak.unwrap();
+            if app.get_share_menu_busy() {
+                return;
+            }
+            app.set_share_menu_busy(true);
+            spawn_xiaomi_share_operation(
+                app_weak.clone(),
+                i18n::tr("gui.op.share-menu.revert", lang).to_string(),
+                revert_xiaomi_share_menu,
+            );
+        }
     });
 
     app.on_apply_locale({
