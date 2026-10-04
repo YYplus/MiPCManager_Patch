@@ -1,9 +1,12 @@
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use crate::{i18n, infra::powershell::system_powershell_path};
+use crate::{
+    i18n,
+    infra::download::{self, DownloadControl, DownloadProgress},
+    install::sources,
+};
 
 /// 安装包所属产品。
 ///
@@ -42,10 +45,11 @@ const HYPERCONNECT_MARKER: &str = "hyperconnect";
 
 /// 根据文件名判定安装包所属产品；非安装包返回 `None`。
 ///
-/// 识别三类命名：
+/// 识别四类命名：
 /// - `*_XiaomiPCManager_*.exe`（完整版小米电脑管家）。
 /// - 含「小米互联」且以 `.exe` 结尾（小米互联最新版本_1.1.2.36_d887cad6.exe 等）。
 /// - 含 `HyperConnect` 且以 `.exe` 结尾（互联互通 2.0 安装包）。
+/// - 含 `PcContinuity` 且以 `.exe` 结尾（小米互联 Windows 安装包）。
 pub fn classify_installer_filename(name: &str) -> Option<InstallerKind> {
     if !name.to_ascii_lowercase().ends_with(".exe") {
         return None;
@@ -55,7 +59,7 @@ pub fn classify_installer_filename(name: &str) -> Option<InstallerKind> {
         return Some(InstallerKind::PcContinuity);
     }
     let lower = name.to_ascii_lowercase();
-    if lower.contains(HYPERCONNECT_MARKER) {
+    if lower.contains(HYPERCONNECT_MARKER) || lower.contains("pccontinuity") {
         return Some(InstallerKind::PcContinuity);
     }
     let stem = lower.strip_suffix(".exe")?;
@@ -139,10 +143,7 @@ pub fn patcher_dir() -> Result<PathBuf> {
 
 /// 从 HTTP(S) URL 推导安全的本地安装包文件名。
 pub fn download_filename(url: &str) -> Result<String> {
-    let lower = url.to_ascii_lowercase();
-    if !lower.starts_with("https://") && !lower.starts_with("http://") {
-        bail!("下载地址必须使用 http:// 或 https://");
-    }
+    download::validate_url(url)?;
     let without_query = url.split(['?', '#']).next().unwrap_or(url);
     let candidate = without_query.rsplit('/').next().unwrap_or_default();
     let filename = Path::new(candidate)
@@ -158,44 +159,16 @@ pub fn download_filename(url: &str) -> Result<String> {
     Ok(filename.to_string())
 }
 
-/// 使用 Windows PowerShell 的 Invoke-WebRequest 将安装包下载到 Patcher 同目录。
-pub fn download_installer(url: &str, target_dir: &Path) -> Result<PathBuf> {
+/// 通过共用下载器获取安装包。推荐地址固定校验 SHA-256，手动地址不覆盖已有文件。
+pub fn download_installer(
+    url: &str,
+    target_dir: &Path,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<PathBuf> {
     let target = target_dir.join(download_filename(url)?);
-    if target.exists() {
-        bail!("下载目标已存在，为避免覆盖已取消：{}", target.display());
-    }
-    let mut temporary_name = target.as_os_str().to_os_string();
-    temporary_name.push(".download.tmp");
-    let temporary = PathBuf::from(temporary_name);
-    if temporary.exists() {
-        fs::remove_file(&temporary)
-            .with_context(|| format!("无法清理临时下载文件 {}", temporary.display()))?;
-    }
-
-    // URL 和目标路径通过环境变量传递，避免将用户输入拼接进 PowerShell 脚本。
-    let script = "$ErrorActionPreference = 'Stop'; \
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-        Invoke-WebRequest -UseBasicParsing -Uri $env:MIPCM_DOWNLOAD_URL -OutFile $env:MIPCM_DOWNLOAD_TARGET";
-    let powershell = system_powershell_path()?;
-    let status = Command::new(&powershell)
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            script,
-        ])
-        .env("MIPCM_DOWNLOAD_URL", url)
-        .env("MIPCM_DOWNLOAD_TARGET", &temporary)
-        .status()
-        .context("无法启动 Windows PowerShell 下载安装包")?;
-    if !status.success() {
-        let _ = fs::remove_file(&temporary);
-        bail!("Windows PowerShell 下载失败（退出码：{status}）");
-    }
-    fs::rename(&temporary, &target)
-        .with_context(|| format!("无法将下载文件保存为 {}", target.display()))?;
-    Ok(target)
+    let checksum = sources::checksum_for_url(url);
+    download::download(url, &target, checksum, control, progress)
 }
 
 /// 启动安装包，返回子进程 PID。
@@ -843,6 +816,15 @@ mod tests {
             classify_installer_filename("小米互联.exe"),
             Some(InstallerKind::PcContinuity)
         );
+        for name in [
+            "QKTo_PcContinuity_hotfix_88a510d20d_1.1.2.36_d887cad6.exe",
+            "HyperConnect_AI.exe",
+        ] {
+            assert_eq!(
+                classify_installer_filename(name),
+                Some(InstallerKind::PcContinuity)
+            );
+        }
         // 新版 HyperConnect 2.0 安装包（英文命名）。
         assert_eq!(
             classify_installer_filename("HyperConnect_2.0.0.429_abc123.exe"),
@@ -948,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn downloads_installer_with_windows_powershell() {
+    fn downloads_installer_with_aria2() {
         let dir = fixture_dir("download");
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -964,23 +946,12 @@ mod tests {
         });
         let url = format!("http://{address}/Test_XiaomiPCManager_feature_5.8.0.74.exe");
 
-        let downloaded = download_installer(&url, &dir).unwrap();
+        let downloaded =
+            download_installer(&url, &dir, &DownloadControl::default(), |_| {}).unwrap();
 
         server.join().unwrap();
         assert_eq!(fs::read(downloaded).unwrap(), b"payload");
         fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn resolves_powershell_from_the_windows_system_directory() {
-        let powershell = system_powershell_path().unwrap();
-        assert!(powershell.is_absolute());
-        assert_eq!(
-            powershell.file_name().unwrap().to_string_lossy(),
-            "powershell.exe"
-        );
-        assert!(powershell.is_file());
     }
 
     #[test]

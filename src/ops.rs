@@ -13,6 +13,9 @@ use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+pub use crate::infra::download::{DownloadControl, DownloadPhase, DownloadProgress};
+pub use install::sources::RecommendedInstaller;
+
 /// 小米电脑管家相关进程（不含扩展名），用于启动时全量关闭的兜底匹配。
 pub const PROC_MIPCM_ALL: &[&str] = &[
     "XiaomiPcManager",
@@ -627,13 +630,89 @@ pub fn uninstall_product() -> Result<Vec<String>> {
 
 // ===================== 安装 =====================
 
+/// 下载选定内置版本，沿用对应产品的安装和补丁流程。
+pub fn download_and_install_recommended(
+    source: RecommendedInstaller,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<Vec<String>> {
+    if source == RecommendedInstaller::Xiaoai {
+        download_and_install_xiaoai(source.url(), control, progress)
+    } else {
+        download_and_install_pc_manager(Some(source.url()), control, progress)
+    }
+}
+
+/// 推荐版或手动地址下载后，沿用现有安装器启动流程。
+pub fn download_and_install_pc_manager(
+    url: Option<&str>,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<Vec<String>> {
+    let url = url.unwrap_or(RecommendedInstaller::PcManager.url()).trim();
+    let kind = pc_manager_installer::classify_installer(Path::new(
+        &pc_manager_installer::download_filename(url)?,
+    ));
+    ensure_install_allowed(
+        kind,
+        install::find_install_root().as_deref(),
+        install::find_pc_continuity_root().as_deref(),
+    )?;
+    let dir = install::sources::download_dir(url)?;
+    let installer = pc_manager_installer::download_installer(url, &dir, control, progress)?;
+    control.check_cancelled()?;
+    let _installer_guard =
+        install::sources::protect_downloaded_installer(&installer, url, control)?;
+    let mut log = vec![format!("✓ 安装包已下载：{}", installer.display())];
+    log.extend(install_from_path(&installer)?);
+    Ok(log)
+}
+
 /// 下载并安装超级小爱，返回可直接呈现的完整操作日志。
-pub fn download_and_install_xiaoai(url: &str) -> Result<Vec<String>> {
-    let dir = pc_manager_installer::patcher_dir()?;
-    let installer = xiaoai_installer::download_installer(url, &dir)?;
+pub fn download_and_install_xiaoai(
+    url: &str,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<Vec<String>> {
+    let url = url.trim();
+    let dir = install::sources::download_dir(url)?;
+    let installer = xiaoai_installer::download_installer(url, &dir, control, progress)?;
+    control.check_cancelled()?;
+    let _installer_guard =
+        install::sources::protect_downloaded_installer(&installer, url, control)?;
     let mut log = vec![format!("✓ 超级小爱安装包已下载：{}", installer.display())];
     log.extend(install_xiaoai_from_path(&installer)?);
     Ok(log)
+}
+
+/// 三个前端共用的进度文字；下载量来自 aria2，不能用预分配文件大小估算。
+pub fn download_progress_text(progress: DownloadProgress, lang: crate::i18n::Lang) -> String {
+    use crate::i18n::tr;
+    match progress.phase {
+        DownloadPhase::Preparing => tr("install.preparing", lang).into(),
+        DownloadPhase::Verifying => tr("install.verifying", lang).into(),
+        DownloadPhase::Complete => tr("install.starting", lang).into(),
+        DownloadPhase::Downloading => {
+            let mib = 1024.0 * 1024.0;
+            let completed = progress.completed as f64 / mib;
+            let speed = progress.bytes_per_second as f64 / mib;
+            let total = if progress.total == 0 {
+                "?".into()
+            } else {
+                format!("{:.1}", progress.total as f64 / mib)
+            };
+            let percent = if progress.total == 0 {
+                String::new()
+            } else {
+                format!("{:.0}% · ", progress.fraction() * 100.0)
+            };
+            format!(
+                "{percent}{completed:.1} / {total} MiB · {speed:.1} MiB/s · {} {}",
+                progress.connections,
+                tr("install.connections", lang)
+            )
+        }
+    }
 }
 
 /// 安装 Patcher 所在目录中唯一的超级小爱安装包，供 TUI 快速执行。

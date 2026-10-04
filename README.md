@@ -14,8 +14,8 @@
 | 📷 **抑制摄像头误报弹窗** | 屏蔽「摄像头暂不可用，点击确定打开设备管理器」这类本机摄像头被误判禁用的弹窗 |
 | 🔊 **音频流转增强** | 在无线 WiFi 与有线 LAN 之间切换音频流转的网络介质 |
 | 💻 **设备伪装** | 伪装为指定机型，解锁机型相关功能 |
-| 📦 **安装小米电脑管家** | 自动查找或下载安装包，释放必要的补丁文件后启动安装 |
-| 📦 **安装超级小爱** | 辅助运行安装包，安装完成后向实际版本目录部署专用 `userenv.dll`（不限制版本） |
+| 📦 **安装电脑管家 / 小米互联** | 选择电脑管家、互联 Windows 版或内测版，一键下载并启动安装；也可手动指定链接或本地安装包 |
+| 📦 **安装超级小爱** | 一键下载并安装，安装完成后向实际版本目录部署专用 `userenv.dll`（不限制版本） |
 | 📊 **状态查看** | 检查当前安装位置、各补丁状态 |
 
 每个功能均提供一键还原，所有补丁操作幂等、可重复执行。
@@ -24,20 +24,33 @@
 
 从 [Releases](../../releases) 页面下载最新版本：
 
-- `MiPCM_GUI_v*.*.*.exe` — 图形界面（推荐）
-- `MiPCM_CLI_v*.*.*.exe` — 命令行工具
+- `MiPCM_Patch_GUI_v*.*.*.exe` — 图形界面（推荐）
+- `MiPCM_Patch_CLI_v*.*.*.exe` — 命令行工具
 
 ## 快速开始
 
 ### 图形界面
 
-双击 `MiPCM_GUI_*.exe`，在弹出的 UAC 窗口中点击「是」，即可看到补丁操作界面：
+双击 `MiPCM_Patch_GUI_v*.*.*.exe`，在弹出的 UAC 窗口中点击「是」，即可看到补丁操作界面：
 
 1. 点击「刷新状态」查看当前安装情况
 2. 按需点击各功能的「应用」按钮
 3. 出问题时点击对应「还原」即可恢复
 
-支持选择本地 `.exe` 安装包或输入下载地址进行安装。
+安装区默认提供「一键下载安装」，来源均为小米官方 CDN：
+
+| 安装来源 | 版本 / 使用要求 |
+|---|---|
+| 小米电脑管家 | 5.8.1.130 |
+| 小米互联 Windows 版 | 1.1.2.36，配合 Xiaomi HyperOS 3 Beta 及以上手机 |
+| 小米互联 Windows 内测版 | 2.0.2.524，配合 Xiaomi HyperOS 4 及以上手机/平板 |
+| 超级小爱 | 3.5.0.220 |
+
+电脑管家与互联版本在同一安装区选择，超级小爱使用独立的一键按钮。点击「手动安装」才会展开下载地址和本地 `.exe` 选择。下载完成后校验固定 SHA-256 并启动安装窗口，请按窗口提示完成安装；超级小爱安装窗口退出后自动注入补丁。
+
+内测版下载地址由官方滚动更新，本工具只启动与内置 SHA-256 一致的已核验安装包。官方更新后若校验失败，需更新工具的下载来源配置，或自行下载并通过手动入口安装。
+
+下载使用内嵌 aria2，最多八路连接，显示完成比例、已下载大小、总大小和速度。服务器不支持分段时使用单连接；实际速度仍取决于下载源和网络。可取消下载，再次下载相同地址时续传。下载缓存位于 `%TEMP%\MiPCManager_Patch\downloads` 下的来源隔离子目录，可随 Windows 临时文件清理；自动清理取决于存储感知设置。缓存保留时，已完成的推荐版会在重新校验后复用，未完成的下载可以续传；缓存被清理后需要重新下载。自定义地址的完整同名文件不会被覆盖，可通过本地文件入口安装。
 
 ### 命令行
 
@@ -63,10 +76,14 @@ MiPCM_CLI.exe device apply --model TM2425
 MiPCM_CLI.exe device revert
 
 # 安装小米电脑管家
+MiPCM_CLI.exe install --recommended
+MiPCM_CLI.exe install --recommended continuity
+MiPCM_CLI.exe install --recommended hyperconnect-beta
 MiPCM_CLI.exe install
 MiPCM_CLI.exe install --installer "D:\path\to\installer.exe"
 
 # 安装超级小爱并注入补丁
+MiPCM_CLI.exe xiaoai install --recommended
 MiPCM_CLI.exe xiaoai install
 MiPCM_CLI.exe xiaoai install --installer "D:\path\to\XiaoaiAgent_Setup.exe"
 MiPCM_CLI.exe xiaoai install --url "https://example.com/XiaoaiAgent_Setup.exe"
@@ -77,6 +94,10 @@ MiPCM_CLI.exe xiaoai revert
 ```
 
 无参数运行会进入交互菜单。
+
+TUI 的「安装」面板按 ↑↓ 选择上述四种来源，按 Enter 下载安装；按 X 安装工具同目录中的超级小爱安装包，下载时按 C 取消。
+
+内嵌下载器的来源、固定哈希和许可见 [aria2 NOTICE](assets/aria2/NOTICE.md)。Release 附带 `aria2-1.37.0-sources.zip`，提供下载器及静态链接库的对应源码和许可；运行工具无需另外安装 aria2。
 
 ## 常见问题
 
