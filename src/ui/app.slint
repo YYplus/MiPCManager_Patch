@@ -170,129 +170,6 @@ export component AppWindow inherits Window {
                         border-width: 1px;
                         VerticalLayout {
                             padding: 16px;
-                            spacing: 10px;
-                            Text { text: root.tr("section.patches"); font-weight: 700; font-size: 16px; }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.locale"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && !root.locale-active; clicked => { root.apply-locale(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && root.locale-active; clicked => { root.revert-locale(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.device"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    CheckBox { text: root.tr("hint.custom"); checked <=> root.custom-mode; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    if !root.custom-mode: ComboBox { model: root.model-presets; current-index <=> root.model-idx; width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    if root.custom-mode: LineEdit { text <=> root.custom-model-input; placeholder-text: root.tr("hint.model.code"); width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
-                                    Button {
-                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.device-active;
-                                        clicked => {
-                                            if root.custom-mode { root.apply-device(root.custom-model-input); }
-                                            else { root.apply-device(root.model-codes[root.model-idx]); }
-                                        }
-                                    }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.device-active; clicked => { root.revert-device(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.camera"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.camera-active; clicked => { root.apply-camera(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.camera-active; clicked => { root.revert-camera(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.audio"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.wifi"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 1); clicked => { root.apply-audio-wifi(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.lan"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 2); clicked => { root.apply-audio-lan(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.audio-active; clicked => { root.revert-audio(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.xiaoai"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && !root.xiaoai-patch-active; clicked => { root.apply-xiaoai(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-patch-active; clicked => { root.revert-xiaoai(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.dual-nic"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.diagnose"); enabled: root.controls-ready && root.full-features; clicked => { root.diagnose-dual-nic(); } }
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.fix"); enabled: root.controls-ready && root.full-features && root.dual-nic-state == 2; clicked => { root.fix-dual-nic(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.smbios"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button {
-                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.smbios-active;
-                                        clicked => {
-                                            if root.custom-mode { root.apply-smbios(root.custom-model-input); }
-                                            else { root.apply-smbios(root.model-codes[root.model-idx]); }
-                                        }
-                                    }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.smbios-active; clicked => { root.revert-smbios(); } }
-                                }
-                            }
-
-                            HorizontalLayout {
-                                min-height: 40px;
-                                spacing: 10px;
-                                Text { text: root.tr("patch.share-menu"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    spacing: 6px;
-                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 1; clicked => { root.apply-xiaomi-share-menu(); } }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 0; clicked => { root.revert-xiaomi-share-menu(); } }
-                                    if root.share-menu-busy: Spinner { indeterminate: true; }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        border-radius: 10px;
-                        border-width: 1px;
-                        VerticalLayout {
-                            padding: 16px;
                             spacing: 8px;
 
                             Rectangle {
@@ -452,6 +329,129 @@ export component AppWindow inherits Window {
                                 }
                                 Text { text: root.xiaoai-progress-text; }
                                 Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.xiaoai-download-active; clicked => { root.cancel-xiaoai-download(); } }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        border-radius: 10px;
+                        border-width: 1px;
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: root.tr("section.patches"); font-weight: 700; font-size: 16px; }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.locale"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && !root.locale-active; clicked => { root.apply-locale(); } }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && (root.full-features || root.continuity-available) && root.locale-active; clicked => { root.revert-locale(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.device"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    CheckBox { text: root.tr("hint.custom"); checked <=> root.custom-mode; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                                    if !root.custom-mode: ComboBox { model: root.model-presets; current-index <=> root.model-idx; width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                                    if root.custom-mode: LineEdit { text <=> root.custom-model-input; placeholder-text: root.tr("hint.model.code"); width: 320px; enabled: root.controls-ready && root.full-features && !root.device-active; }
+                                    Button {
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.device-active;
+                                        clicked => {
+                                            if root.custom-mode { root.apply-device(root.custom-model-input); }
+                                            else { root.apply-device(root.model-codes[root.model-idx]); }
+                                        }
+                                    }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.device-active; clicked => { root.revert-device(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.camera"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.camera-active; clicked => { root.apply-camera(); } }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.camera-active; clicked => { root.revert-camera(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.audio"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.wifi"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 1); clicked => { root.apply-audio-wifi(); } }
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.lan"); enabled: root.controls-ready && root.full-features && (!root.audio-active || root.audio-mode != 2); clicked => { root.apply-audio-lan(); } }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.audio-active; clicked => { root.revert-audio(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.xiaoai"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && !root.xiaoai-patch-active; clicked => { root.apply-xiaoai(); } }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.xiaoai-available && !root.xiaoai-busy && root.xiaoai-patch-active; clicked => { root.revert-xiaoai(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.dual-nic"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.diagnose"); enabled: root.controls-ready && root.full-features; clicked => { root.diagnose-dual-nic(); } }
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.fix"); enabled: root.controls-ready && root.full-features && root.dual-nic-state == 2; clicked => { root.fix-dual-nic(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.smbios"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button {
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && root.full-features && !root.smbios-active;
+                                        clicked => {
+                                            if root.custom-mode { root.apply-smbios(root.custom-model-input); }
+                                            else { root.apply-smbios(root.model-codes[root.model-idx]); }
+                                        }
+                                    }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && root.full-features && root.smbios-active; clicked => { root.revert-smbios(); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                min-height: 40px;
+                                spacing: 10px;
+                                Text { text: root.tr("patch.share-menu"); vertical-alignment: center; min-width: 150px; preferred-width: 150px; max-width: 150px; font-size: 16px; }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    spacing: 6px;
+                                    Button { height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 1; clicked => { root.apply-xiaomi-share-menu(); } }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.revert"); enabled: root.controls-ready && !root.share-menu-busy && root.share-menu-state != 0; clicked => { root.revert-xiaomi-share-menu(); } }
+                                    if root.share-menu-busy: Spinner { indeterminate: true; }
+                                }
                             }
                         }
                     }
