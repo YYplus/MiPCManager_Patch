@@ -122,10 +122,7 @@ mod tests {
         assert_eq!(buf.len(), snapshot_len, "补丁必须等长，不得移位");
         let name_at = 4 + ANCHOR_GEO.len();
         assert_eq!(&buf[name_at..name_at + PATCHED_NAME.len()], PATCHED_NAME);
-        assert_eq!(
-            patch_bytes(&mut buf).unwrap(),
-            PatchOutcome::AlreadyPatched
-        );
+        assert_eq!(patch_bytes(&mut buf).unwrap(), PatchOutcome::AlreadyPatched);
     }
 
     #[test]

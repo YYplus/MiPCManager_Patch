@@ -461,59 +461,93 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
 
     app.on_apply_locale({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.locale.apply", lang), || {
-            ops::apply_locale(None, "CN", true, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.locale.apply", lang),
+                || ops::apply_locale(None, "CN", true, false),
+            )
+        }
     });
     app.on_revert_locale({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.locale.revert", lang), || {
-            ops::revert_locale(None, true, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.locale.revert", lang),
+                || ops::revert_locale(None, true, false),
+            )
+        }
     });
     app.on_apply_device({
         let app_weak = app_weak.clone();
         move |model: SharedString| {
             let m = model.to_string();
             let label = i18n::tr("gui.op.device.apply", lang).replace("{model}", &m);
-            run_patch(&app_weak.unwrap(), &label, || ops::apply_device(&m, None, false));
+            run_patch(&app_weak.unwrap(), &label, || {
+                ops::apply_device(&m, None, false)
+            });
         }
     });
     app.on_revert_device({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.device.revert", lang), || {
-            ops::revert_device(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.device.revert", lang),
+                || ops::revert_device(None, false),
+            )
+        }
     });
     app.on_apply_camera({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.camera.apply", lang), || {
-            ops::apply_camera(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.camera.apply", lang),
+                || ops::apply_camera(None, false),
+            )
+        }
     });
     app.on_revert_camera({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.camera.revert", lang), || {
-            ops::revert_camera(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.camera.revert", lang),
+                || ops::revert_camera(None, false),
+            )
+        }
     });
     app.on_apply_audio_wifi({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.audio.wifi", lang), || {
-            ops::apply_audio(ops::BroadcastMode::Wireless, None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.audio.wifi", lang),
+                || ops::apply_audio(ops::BroadcastMode::Wireless, None, false),
+            )
+        }
     });
     app.on_apply_audio_lan({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.audio.lan", lang), || {
-            ops::apply_audio(ops::BroadcastMode::Wired, None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.audio.lan", lang),
+                || ops::apply_audio(ops::BroadcastMode::Wired, None, false),
+            )
+        }
     });
     app.on_revert_audio({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.audio.revert", lang), || {
-            ops::revert_audio(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.audio.revert", lang),
+                || ops::revert_audio(None, false),
+            )
+        }
     });
 
     app.on_diagnose_dual_nic({
@@ -548,26 +582,40 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         move |model: SharedString| {
             let m = model.to_string();
             let label = i18n::tr("gui.op.smbios.apply", lang).replace("{model}", &m);
-            run_patch(&app_weak.unwrap(), &label, || ops::apply_smbios(Some(&m), None, false));
+            run_patch(&app_weak.unwrap(), &label, || {
+                ops::apply_smbios(Some(&m), None, false)
+            });
         }
     });
     app.on_revert_smbios({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.smbios.revert", lang), || {
-            ops::revert_smbios(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.smbios.revert", lang),
+                || ops::revert_smbios(None, false),
+            )
+        }
     });
     app.on_apply_xiaoai({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.xiaoai.apply", lang), || {
-            ops::apply_xiaoai(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.xiaoai.apply", lang),
+                || ops::apply_xiaoai(None, false),
+            )
+        }
     });
     app.on_revert_xiaoai({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.xiaoai.revert", lang), || {
-            ops::revert_xiaoai(None, false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.xiaoai.revert", lang),
+                || ops::revert_xiaoai(None, false),
+            )
+        }
     });
 
     app.on_clear_log({
@@ -580,9 +628,13 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     });
     app.on_uninstall_msix({
         let app_weak = app_weak.clone();
-        move || run_patch(&app_weak.unwrap(), i18n::tr("gui.op.uninstall.msix", lang), || {
-            ops::uninstall_msix(false)
-        })
+        move || {
+            run_patch(
+                &app_weak.unwrap(),
+                i18n::tr("gui.op.uninstall.msix", lang),
+                || ops::uninstall_msix(false),
+            )
+        }
     });
     app.on_request_uninstall({
         let app_weak = app_weak.clone();
@@ -623,7 +675,11 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             if xiaoai {
                 run_patch(&app, i18n::tr("install.row.xiaoai", lang), uninstall_xiaoai);
             } else {
-                run_patch(&app, i18n::tr("gui.op.uninstall.product", lang), ops::uninstall_product);
+                run_patch(
+                    &app,
+                    i18n::tr("gui.op.uninstall.product", lang),
+                    ops::uninstall_product,
+                );
             }
         }
     });
@@ -641,18 +697,26 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         let download = manager_download.clone();
         move || {
-            let Some(app) = app_weak.upgrade() else { return; };
-            if app.get_downloading() { return; }
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            if app.get_downloading() {
+                return;
+            }
             let Some(source) = ops::RecommendedInstaller::MANAGER_VARIANTS
                 .get(app.get_manager_source_idx() as usize)
                 .copied()
-            else { return; };
+            else {
+                return;
+            };
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
                 source.label(lang).into(),
                 InstallProduct::Manager,
                 lang,
-                move |control, progress| ops::download_and_install_recommended(source, control, progress),
+                move |control, progress| {
+                    ops::download_and_install_recommended(source, control, progress)
+                },
             ));
         }
     });
@@ -661,14 +725,18 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         let download = xiaoai_download.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) { return; }
+            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) {
+                return;
+            }
             let source = ops::RecommendedInstaller::Xiaoai;
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
                 source.label(lang).into(),
                 InstallProduct::Xiaoai,
                 lang,
-                move |control, progress| ops::download_and_install_recommended(source, control, progress),
+                move |control, progress| {
+                    ops::download_and_install_recommended(source, control, progress)
+                },
             ));
         }
     });
@@ -677,7 +745,9 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         let download = manager_download.clone();
         move || {
-            if let Some(control) = download.borrow().as_ref() { control.cancel(); }
+            if let Some(control) = download.borrow().as_ref() {
+                control.cancel();
+            }
             if let Some(app) = app_weak.upgrade() {
                 app.set_manager_download_active(false);
                 app.set_manager_progress_text(i18n::tr("install.cancelling", lang).into());
@@ -688,7 +758,9 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         let download = xiaoai_download.clone();
         move || {
-            if let Some(control) = download.borrow().as_ref() { control.cancel(); }
+            if let Some(control) = download.borrow().as_ref() {
+                control.cancel();
+            }
             if let Some(app) = app_weak.upgrade() {
                 app.set_xiaoai_download_active(false);
                 app.set_xiaoai_progress_text(i18n::tr("install.cancelling", lang).into());
@@ -701,9 +773,15 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let download = manager_download.clone();
         move |url: SharedString| {
             let url = url.to_string();
-            if url.trim().is_empty() { return; }
-            let Some(app) = app_weak.upgrade() else { return; };
-            if app.get_downloading() { return; }
+            if url.trim().is_empty() {
+                return;
+            }
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            if app.get_downloading() {
+                return;
+            }
             if let Err(e) = ensure_manual_url_kind(&url, InstallerKind::XiaomiPcManager) {
                 append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
                 return;
@@ -713,7 +791,9 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
                 i18n::tr("install.source.manager", lang).into(),
                 InstallProduct::Manager,
                 lang,
-                move |control, progress| ops::download_and_install_pc_manager(Some(&url), control, progress),
+                move |control, progress| {
+                    ops::download_and_install_pc_manager(Some(&url), control, progress)
+                },
             ));
         }
     });
@@ -721,13 +801,17 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_manager_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) { return; }
+            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) {
+                return;
+            }
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter(i18n::tr("gui.browse.filter", lang), &["exe"])
                 .set_title(i18n::tr("install.source.manager", lang))
                 .pick_file()
             {
-                app_weak.unwrap().set_manager_path_input(path.display().to_string().into());
+                app_weak
+                    .unwrap()
+                    .set_manager_path_input(path.display().to_string().into());
             }
         }
     });
@@ -736,14 +820,16 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move |path: SharedString| {
             let app = app_weak.unwrap();
-            if app.get_downloading() { return; }
+            if app.get_downloading() {
+                return;
+            }
             let path = PathBuf::from(path.to_string());
             if let Err(e) = ensure_manual_installer_kind(&path, InstallerKind::XiaomiPcManager) {
                 append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
                 return;
             }
-            let label = i18n::tr("gui.op.install", lang)
-                .replace("{path}", &path.display().to_string());
+            let label =
+                i18n::tr("gui.op.install", lang).replace("{path}", &path.display().to_string());
             spawn_install_operation(
                 app_weak.clone(),
                 label,
@@ -760,9 +846,15 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let download = manager_download.clone();
         move |url: SharedString| {
             let url = url.to_string();
-            if url.trim().is_empty() { return; }
-            let Some(app) = app_weak.upgrade() else { return; };
-            if app.get_downloading() { return; }
+            if url.trim().is_empty() {
+                return;
+            }
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            if app.get_downloading() {
+                return;
+            }
             if let Err(e) = ensure_manual_url_kind(&url, InstallerKind::PcContinuity) {
                 append_log(&app, i18n::tr("install.kind.continuity", lang), Err(e));
                 return;
@@ -772,7 +864,9 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
                 i18n::tr("install.kind.continuity", lang).into(),
                 InstallProduct::Manager,
                 lang,
-                move |control, progress| ops::download_and_install_pc_manager(Some(&url), control, progress),
+                move |control, progress| {
+                    ops::download_and_install_pc_manager(Some(&url), control, progress)
+                },
             ));
         }
     });
@@ -780,13 +874,17 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_continuity_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) { return; }
+            if app_weak.upgrade().is_none_or(|app| app.get_downloading()) {
+                return;
+            }
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter(i18n::tr("gui.browse.filter", lang), &["exe"])
                 .set_title(i18n::tr("install.kind.continuity", lang))
                 .pick_file()
             {
-                app_weak.unwrap().set_continuity_path_input(path.display().to_string().into());
+                app_weak
+                    .unwrap()
+                    .set_continuity_path_input(path.display().to_string().into());
             }
         }
     });
@@ -795,14 +893,16 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move |path: SharedString| {
             let app = app_weak.unwrap();
-            if app.get_downloading() { return; }
+            if app.get_downloading() {
+                return;
+            }
             let path = PathBuf::from(path.to_string());
             if let Err(e) = ensure_manual_installer_kind(&path, InstallerKind::PcContinuity) {
                 append_log(&app, i18n::tr("install.kind.continuity", lang), Err(e));
                 return;
             }
-            let label = i18n::tr("gui.op.install", lang)
-                .replace("{path}", &path.display().to_string());
+            let label =
+                i18n::tr("gui.op.install", lang).replace("{path}", &path.display().to_string());
             spawn_install_operation(
                 app_weak.clone(),
                 label,
@@ -819,9 +919,15 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let download = xiaoai_download.clone();
         move |url: SharedString| {
             let url = url.to_string();
-            if url.trim().is_empty() { return; }
-            let Some(app) = app_weak.upgrade() else { return; };
-            if app.get_xiaoai_busy() { return; }
+            if url.trim().is_empty() {
+                return;
+            }
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            if app.get_xiaoai_busy() {
+                return;
+            }
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
                 i18n::tr("install.xiaoai.title", lang).to_string(),
@@ -835,13 +941,17 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     app.on_browse_xiaoai_installer({
         let app_weak = app_weak.clone();
         move || {
-            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) { return; }
+            if app_weak.upgrade().is_none_or(|app| app.get_xiaoai_busy()) {
+                return;
+            }
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter(i18n::tr("gui.browse.filter", lang), &["exe"])
                 .set_title(i18n::tr("install.xiaoai.title", lang))
                 .pick_file()
             {
-                app_weak.unwrap().set_xiaoai_path_input(path.display().to_string().into());
+                app_weak
+                    .unwrap()
+                    .set_xiaoai_path_input(path.display().to_string().into());
             }
         }
     });
@@ -850,9 +960,16 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
         let app_weak = app_weak.clone();
         move |path: SharedString| {
             let path = PathBuf::from(path.to_string());
-            if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) { return; }
+            if !path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
+            {
+                return;
+            }
             let app = app_weak.unwrap();
-            if app.get_xiaoai_busy() { return; }
+            if app.get_xiaoai_busy() {
+                return;
+            }
             app.set_xiaoai_path_input("".into());
             let label = i18n::tr("gui.op.xiaoai.install", lang)
                 .replace("{path}", &path.display().to_string());

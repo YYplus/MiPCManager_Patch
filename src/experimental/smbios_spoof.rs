@@ -12,8 +12,8 @@
 
 use super::{smbios, x64_trampoline};
 use crate::infra::pe::PeImage;
-use crate::patches::locale;
 use crate::install;
+use crate::patches::locale;
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
