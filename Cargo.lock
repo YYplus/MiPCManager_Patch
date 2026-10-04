@@ -2952,17 +2952,22 @@ dependencies = [
 
 [[package]]
 name = "mipcmanager_patch"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "crossterm",
  "embed-resource",
+ "flate2",
+ "getrandom 0.4.3",
  "ratatui",
  "rfd",
+ "serde_json",
+ "sha2",
  "slint",
  "slint-build",
  "sysinfo",
+ "tempfile",
  "windows-sys 0.61.2",
  "winreg 0.56.0",
 ]

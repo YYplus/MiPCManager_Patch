@@ -5,7 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton, MouseEve
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span, Text},
     widgets::{Block, List, ListItem, Paragraph},
 };
@@ -24,6 +24,7 @@ use super::{theme, widgets};
 // ── Log message ───────────────────────────────────────────────────
 pub enum LogMessage {
     Line(String),
+    DownloadProgress(ops::DownloadProgress),
     Done,
     Error(String),
 }
@@ -256,6 +257,7 @@ pub struct App {
     patch_idx: usize,
     patch_btn_idx: usize,
     uninstall_idx: usize,
+    install_idx: usize,
     log_scroll: usize,
 
     device_preset_idx: usize,
@@ -272,6 +274,7 @@ pub struct App {
     log: Vec<String>,
     op_running: bool,
     op_label: String,
+    download_control: Option<ops::DownloadControl>,
 }
 
 impl App {
@@ -283,6 +286,7 @@ impl App {
             patch_idx: 0,
             patch_btn_idx: 0,
             uninstall_idx: 0,
+            install_idx: 0,
             log_scroll: 0,
             device_preset_idx: 0,
             smbios_preset_idx: 0,
@@ -295,6 +299,7 @@ impl App {
             log: Vec::new(),
             op_running: false,
             op_label: String::new(),
+            download_control: None,
         };
         app.refresh_status();
         app
@@ -342,7 +347,12 @@ impl App {
         }
 
         match code {
-            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => return false,
+            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                if let Some(control) = &self.download_control {
+                    control.cancel();
+                }
+                return false;
+            }
             KeyCode::Tab => {
                 self.tab = self.tab.next();
                 self.patch_btn_idx = 0;
@@ -361,6 +371,12 @@ impl App {
         }
 
         if self.op_running {
+            if matches!(code, KeyCode::Char('c') | KeyCode::Char('C'))
+                && let Some(control) = &self.download_control
+            {
+                control.cancel();
+                self.op_label = i18n::tr("install.cancelling", self.lang).into();
+            }
             return true;
         }
 
@@ -524,8 +540,28 @@ impl App {
     }
 
     fn handle_install_key(&mut self, code: KeyCode) {
-        if code == KeyCode::Enter {
+        if code == KeyCode::Up {
+            self.install_idx = self.install_idx.saturating_sub(1);
+        } else if code == KeyCode::Down {
+            self.install_idx = (self.install_idx + 1).min(ops::RecommendedInstaller::ALL.len() - 1);
+        } else if code == KeyCode::Enter {
+            let source = ops::RecommendedInstaller::ALL[self.install_idx];
+            let label = source.label(self.lang).to_string();
+            // 在派发线程之前设置 busy，避免连续按 Enter 排队重复安装。
+            self.op_running = true;
+            self.op_label = label.clone();
+            let control = ops::DownloadControl::default();
+            self.download_control = Some(control.clone());
+            let progress_tx = self.tx.clone();
+            spawn_op(self.tx.clone(), label, self.lang, move || {
+                ops::download_and_install_recommended(source, &control, |progress| {
+                    let _ = progress_tx.send(LogMessage::DownloadProgress(progress));
+                })
+            });
+        } else if matches!(code, KeyCode::Char('x') | KeyCode::Char('X')) {
             let label = i18n::tr("tui.op.xiaoai.install", self.lang).to_string();
+            self.op_running = true;
+            self.op_label = label.clone();
             spawn_op(self.tx.clone(), label, self.lang, ops::install_local_xiaoai);
         }
     }
@@ -608,12 +644,26 @@ impl App {
                 Ok(LogMessage::Done) => {
                     self.op_running = false;
                     self.op_label.clear();
+                    self.download_control = None;
                     self.refresh_status();
+                }
+                Ok(LogMessage::DownloadProgress(progress)) => {
+                    if progress.phase == ops::DownloadPhase::Complete {
+                        self.download_control = None;
+                    }
+                    if self
+                        .download_control
+                        .as_ref()
+                        .is_none_or(|control| control.check_cancelled().is_ok())
+                    {
+                        self.op_label = ops::download_progress_text(progress, self.lang);
+                    }
                 }
                 Ok(LogMessage::Error(e)) => {
                     self.log.push(format!("✗ {e}"));
                     self.op_running = false;
                     self.op_label.clear();
+                    self.download_control = None;
                     self.log_scroll = self.log.len().saturating_sub(1);
                 }
                 Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
@@ -829,55 +879,41 @@ impl App {
         f.render_widget(block, area);
 
         let lang = self.lang;
-        let lines = vec![
-            Line::from(Span::styled(
-                i18n::tr("tui.install.xiaoai.enter", lang),
-                theme::item_selected(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.title", lang),
+        let mut lines = Vec::new();
+        for (index, source) in ops::RecommendedInstaller::ALL.into_iter().enumerate() {
+            let selected = index == self.install_idx;
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "{} {}",
+                    if selected { "▶" } else { " " },
+                    source.label(lang)
+                ),
+                if selected {
+                    theme::item_selected()
+                } else {
+                    theme::item_hint()
+                },
+            )));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(
+            ops::RecommendedInstaller::ALL[self.install_idx].requirement(lang),
+        ));
+        lines.push(Line::from(""));
+        for key in [
+            "tui.install.xiaoai.enter",
+            "tui.install.title",
+            "tui.install.hint.cmd1",
+            "tui.install.hint.cmd2",
+            "tui.install.hint.xiaoai1",
+            "tui.install.hint.xiaoai2",
+            "install.xiaoai.note",
+        ] {
+            lines.push(Line::from(Span::styled(
+                i18n::tr(key, lang),
                 theme::item_hint(),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.cmd1", lang),
-                Style::default()
-                    .fg(theme::CYAN)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.cmd2", lang),
-                Style::default()
-                    .fg(theme::CYAN)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("install.xiaoai.title", lang),
-                theme::item_hint(),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.xiaoai1", lang),
-                Style::default()
-                    .fg(theme::PURPLE)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.hint.xiaoai2", lang),
-                Style::default()
-                    .fg(theme::PURPLE)
-                    .add_modifier(Modifier::ITALIC),
-            )),
-            Line::from(Span::styled(
-                i18n::tr("install.xiaoai.note", lang),
-                theme::item_hint(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                i18n::tr("tui.install.desc", lang),
-                theme::item_hint(),
-            )),
-        ];
+            )));
+        }
 
         f.render_widget(
             Paragraph::new(Text::from(lines))

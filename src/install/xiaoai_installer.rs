@@ -1,6 +1,7 @@
 //! 超级小爱安装器启动、等待和安装目录定位。
 
-use crate::install::pc_manager_installer;
+use crate::infra::download::{self, DownloadControl, DownloadProgress};
+use crate::install::{pc_manager_installer, sources};
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,20 +30,26 @@ pub fn find_local_installers(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// 下载超级小爱安装包。
-pub fn download_installer(url: &str, target_dir: &Path) -> Result<PathBuf> {
+pub fn download_installer(
+    url: &str,
+    target_dir: &Path,
+    control: &DownloadControl,
+    progress: impl FnMut(DownloadProgress),
+) -> Result<PathBuf> {
     let downloaded_name = pc_manager_installer::download_filename(url)?;
     let needs_xiaoai_fallback = downloaded_name == "XiaomiPCManagerInstaller.exe";
-    let fallback = target_dir.join(DOWNLOAD_FALLBACK_NAME);
-    if needs_xiaoai_fallback && fallback.exists() {
-        bail!("下载目标已存在，为避免覆盖已取消：{}", fallback.display());
-    }
-    let downloaded = pc_manager_installer::download_installer(url, target_dir)?;
-    if !needs_xiaoai_fallback {
-        return Ok(downloaded);
-    }
-    fs::rename(&downloaded, &fallback)
-        .with_context(|| format!("无法将超级小爱安装包重命名为 {}", fallback.display()))?;
-    Ok(fallback)
+    let filename = if needs_xiaoai_fallback {
+        DOWNLOAD_FALLBACK_NAME
+    } else {
+        &downloaded_name
+    };
+    download::download(
+        url,
+        &target_dir.join(filename),
+        sources::checksum_for_url(url),
+        control,
+        progress,
+    )
 }
 
 /// 返回安装根目录下版本号最高的目录，不限制具体版本。
