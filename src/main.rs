@@ -8,7 +8,8 @@ use mipcmanager_patch::{
     i18n,
     install::pc_manager_installer,
     ops,
-    patches::device as device_spoof,
+    patches::{device as device_spoof, xiaomi_share_menu},
+    share_menu,
 };
 use std::path::{Path, PathBuf};
 
@@ -54,6 +55,11 @@ enum Command {
         #[command(subcommand)]
         action: SmbiosAction,
     },
+    /// Windows 11 一级右键“使用小米互传发送”
+    ShareMenu {
+        #[command(subcommand)]
+        action: ShareMenuAction,
+    },
     /// 安装小米电脑管家 / 小米互联（自动识别安装包所属产品）
     Install {
         /// 显式指定 .exe 安装包
@@ -96,6 +102,14 @@ enum PatchAction {
         #[arg(long)]
         no_kill: bool,
     },
+}
+
+#[derive(Subcommand, Clone)]
+enum ShareMenuAction {
+    /// 启用右键菜单
+    Apply,
+    /// 关闭右键菜单并清理组件
+    Revert,
 }
 
 #[derive(Subcommand, Clone)]
@@ -276,7 +290,14 @@ fn main() {
 fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
     match cmd {
         Command::Status => {
-            print_log(ops::status_lines());
+            let mut lines = ops::status_lines();
+            let share_state = match xiaomi_share_menu::current_state() {
+                xiaomi_share_menu::ShellMenuState::Enabled => "已启用",
+                xiaomi_share_menu::ShellMenuState::Disabled => "未启用",
+                xiaomi_share_menu::ShellMenuState::Partial => "状态不完整（可重新应用修复）",
+            };
+            lines.push(format!("Windows 11 右键小米互传: {share_state}"));
+            print_log(lines);
             Ok(())
         }
         Command::Locale {
@@ -357,6 +378,16 @@ fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
             }
             SmbiosAction::Revert { dll, no_kill } => {
                 print_log(ops::revert_smbios(dll, no_kill)?);
+                Ok(())
+            }
+        },
+        Command::ShareMenu { action } => match action {
+            ShareMenuAction::Apply => {
+                print_log(share_menu::apply()?);
+                Ok(())
+            }
+            ShareMenuAction::Revert => {
+                print_log(share_menu::revert()?);
                 Ok(())
             }
         },
@@ -529,22 +560,18 @@ fn choose_manager_installer(
 
 // ── 数据驱动的安装包选择菜单 ────────────────────────────────────
 
-/// 菜单动作：定义每个菜单项对应的业务逻辑。
-/// 新增菜单项时在此添加变体并在 [`INSTALLER_SOURCE_MENU`] 中注册。
 enum InstallerSourceAction {
     Recommended(ops::RecommendedInstaller),
     DownloadUrl,
     SpecifyPath,
 }
 
-/// 声明式菜单项：key 匹配用户输入，description 为显示文本，action 为对应逻辑。
 struct MenuEntry {
     key: &'static str,
     description: &'static str,
     action: InstallerSourceAction,
 }
 
-/// 安装包来源选择菜单 — 新增选项只需在此切片追加一条记录。
 const INSTALLER_SOURCE_MENU: &[MenuEntry] = &[
     MenuEntry {
         key: "1",
@@ -673,6 +700,12 @@ mod install_routing_tests {
             assert_eq!(ops::RecommendedInstaller::from(product), expected);
         }
         assert!(Cli::try_parse_from(["MiPCM_CLI", "install", "--recommended", "unknown"]).is_err());
+    }
+
+    #[test]
+    fn share_menu_command_parses() {
+        assert!(Cli::try_parse_from(["MiPCM_CLI", "share-menu", "apply"]).is_ok());
+        assert!(Cli::try_parse_from(["MiPCM_CLI", "share-menu", "revert"]).is_ok());
     }
 
     #[test]
