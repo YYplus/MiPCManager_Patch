@@ -1,10 +1,20 @@
 #![windows_subsystem = "windows"]
 
 use anyhow::{Context, Result, bail};
-use mipcmanager_patch::{elevate, i18n, install, ops, patches::device as ds, uninstall};
+use mipcmanager_patch::{
+    elevate,
+    experimental::smbios_spoof,
+    i18n,
+    infra::pe::PeImage,
+    install,
+    ops,
+    patches::{ai, audio, camera, device as ds, locale},
+    uninstall,
+};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 #[cfg(windows)]
 use std::cell::RefCell;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -37,6 +47,18 @@ fn main() {
             ("install.row.continuity", i18n::Lang::En) => "Xiaomi Interconnectivity".into(),
             ("install.row.xiaoai", i18n::Lang::Zh) => "超级小爱".into(),
             ("install.row.xiaoai", i18n::Lang::En) => "Super XiaoAI".into(),
+            ("state.applied", i18n::Lang::Zh) => "已应用".into(),
+            ("state.applied", i18n::Lang::En) => "Applied".into(),
+            ("state.not-applied", i18n::Lang::Zh) => "未应用".into(),
+            ("state.not-applied", i18n::Lang::En) => "Not applied".into(),
+            ("state.fixed", i18n::Lang::Zh) => "已修复".into(),
+            ("state.fixed", i18n::Lang::En) => "Fixed".into(),
+            ("state.needs-fix", i18n::Lang::Zh) => "待修复".into(),
+            ("state.needs-fix", i18n::Lang::En) => "Needs fix".into(),
+            ("state.not-configured", i18n::Lang::Zh) => "未配置".into(),
+            ("state.not-configured", i18n::Lang::En) => "Not configured".into(),
+            ("state.unknown", i18n::Lang::Zh) => "状态异常".into(),
+            ("state.unknown", i18n::Lang::En) => "Unknown".into(),
             _ => i18n::tr(&key, lang).into(),
         }
     });
@@ -71,11 +93,140 @@ fn main() {
     app.run().unwrap();
 }
 
+fn current_locale_dll() -> Option<PathBuf> {
+    if let Some(root) = install::find_install_root() {
+        let version = install::latest_version_dir(&root).ok()?;
+        return Some(version.join(locale::TARGET_DLL));
+    }
+    let root = install::find_pc_continuity_root()?;
+    let version = install::latest_version_dir(&root).ok()?;
+    Some(install::runtime_native_dir(&version).join(locale::TARGET_DLL))
+}
+
+fn locale_is_patched(path: &Path) -> bool {
+    let Ok(mut data) = fs::read(path) else {
+        return false;
+    };
+    matches!(
+        locale::patch_bytes(&mut data),
+        Ok(locale::PatchOutcome::AlreadyPatched)
+    )
+}
+
+fn differs_from_backup(path: &Path) -> bool {
+    let backup = install::backup_path(path);
+    let (Ok(current), Ok(original)) = (fs::read(path), fs::read(backup)) else {
+        return false;
+    };
+    current != original
+}
+
+fn audio_mode(version: &Path) -> i32 {
+    let states = audio::current_state(version);
+    if states.is_empty() {
+        return 0;
+    }
+    let all_wifi = states
+        .iter()
+        .all(|(_, state)| state.contains("无线") || state.contains("WiFi"));
+    if all_wifi {
+        return 1;
+    }
+    let all_lan = states
+        .iter()
+        .all(|(_, state)| state.contains("有线") || state.contains("LAN"));
+    if all_lan { 2 } else { 3 }
+}
+
+fn audio_route_active(version: &Path) -> bool {
+    let state = audio::wifi_route_state(version);
+    !state.contains("未配置") && !state.contains("状态不可读")
+}
+
+fn smbios_is_patched(path: &Path) -> bool {
+    let Ok(data) = fs::read(path) else {
+        return false;
+    };
+    let Ok(pe) = PeImage::parse(data) else {
+        return false;
+    };
+    let Ok((_, iat_rva, _)) = pe.find_iat_entry("kernel32", "GetSystemFirmwareTable") else {
+        return false;
+    };
+    install::backup_path(path).exists() && pe.find_call_to_iat(iat_rva).is_err()
+}
+
+fn sync_device_model(app: &AppWindow, model: &str) {
+    if let Some(index) = ds::PRESETS.iter().position(|preset| preset.code == model) {
+        app.set_custom_mode(false);
+        app.set_model_idx(index as i32);
+    } else {
+        app.set_custom_mode(true);
+        app.set_custom_model_input(model.into());
+    }
+}
+
 fn refresh(app: &AppWindow) {
-    app.set_full_features(ops::full_features_available());
-    app.set_continuity_available(install::find_pc_continuity_root().is_some());
-    app.set_xiaoai_available(ops::xiaoai_available());
+    let full = ops::full_features_available();
+    let continuity = install::find_pc_continuity_root().is_some();
+    let xiaoai_available = ops::xiaoai_available();
+    app.set_full_features(full);
+    app.set_continuity_available(continuity);
+    app.set_xiaoai_available(xiaoai_available);
     app.set_status_text(ops::status_lines().join("\n").into());
+
+    let locale_active = current_locale_dll()
+        .as_deref()
+        .is_some_and(locale_is_patched);
+    app.set_locale_active(locale_active);
+
+    app.set_device_active(false);
+    app.set_camera_active(false);
+    app.set_audio_active(false);
+    app.set_audio_mode(0);
+    app.set_dual_nic_state(0);
+    app.set_smbios_active(false);
+
+    if full && let Ok(version) = ops::resolve_full_version_dir() {
+        let (proxy_ok, model) = ds::current_state(&version);
+        let device_active = proxy_ok || model.is_some();
+        app.set_device_active(device_active);
+        if let Some(model) = model.as_deref() {
+            sync_device_model(app, model);
+        }
+
+        let camera_path = version.join(camera::TARGET_DLL);
+        app.set_camera_active(differs_from_backup(&camera_path));
+
+        let mode = audio_mode(&version);
+        let route_active = audio_route_active(&version);
+        let audio_changed = [audio::TARGET_MIPCAUDIO, audio::TARGET_IDMRUNTIME]
+            .iter()
+            .any(|name| differs_from_backup(&version.join(name)));
+        let audio_active = audio_changed || route_active;
+        app.set_audio_active(audio_active);
+        app.set_audio_mode(mode);
+        let dual_state = if !audio_active {
+            0
+        } else {
+            match mode {
+                1 if route_active => 1,
+                1 => 2,
+                2 if !route_active => 1,
+                2 => 2,
+                _ => 3,
+            }
+        };
+        app.set_dual_nic_state(dual_state);
+
+        let smbios_path = version.join(smbios_spoof::TARGET_DLL);
+        app.set_smbios_active(smbios_is_patched(&smbios_path));
+    }
+
+    let xiaoai_patch_active = install::find_xiaoai_root()
+        .and_then(|root| install::latest_version_dir(&root).ok())
+        .is_some_and(|version| ai::current_state(&version));
+    app.set_xiaoai_patch_active(xiaoai_patch_active);
 }
 
 fn append_log(app: &AppWindow, label: &str, result: Result<Vec<String>>) {
