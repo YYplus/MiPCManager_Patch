@@ -46,8 +46,10 @@ export component AppWindow inherits Window {
     in-out property <bool> xiaoai-download-active: false;
     in-out property <bool> show-confirm: false;
     in-out property <string> confirm-desc;
-    in-out property <string> url-input;
-    in-out property <string> path-input;
+    in-out property <string> manager-url-input;
+    in-out property <string> manager-path-input;
+    in-out property <string> continuity-url-input;
+    in-out property <string> continuity-path-input;
     in-out property <string> xiaoai-url-input;
     in-out property <string> xiaoai-path-input;
     in-out property <string> custom-model-input: "TM2425";
@@ -74,13 +76,16 @@ export component AppWindow inherits Window {
     callback revert-smbios();
     callback apply-xiaoai();
     callback revert-xiaoai();
-    callback download-and-install(string);
     callback install-recommended();
     callback install-recommended-xiaoai();
     callback cancel-download();
     callback cancel-xiaoai-download();
-    callback browse-installer();
-    callback start-install(string);
+    callback download-and-install-manager(string);
+    callback browse-manager-installer();
+    callback start-manager-install(string);
+    callback download-and-install-continuity(string);
+    callback browse-continuity-installer();
+    callback start-continuity-install(string);
     callback download-and-install-xiaoai(string);
     callback browse-xiaoai-installer();
     callback start-xiaoai-install(string);
@@ -102,16 +107,10 @@ export component AppWindow inherits Window {
                 font-weight: 700;
                 vertical-alignment: center;
             }
-
             HorizontalLayout {
                 alignment: end;
                 spacing: 6px;
-                Button {
-                    height: 30px;
-                    width: 80px;
-                    text: root.tr("btn.refresh");
-                    clicked => { root.refresh(); }
-                }
+                Button { height: 30px; width: 80px; text: root.tr("btn.refresh"); clicked => { root.refresh(); } }
             }
         }
 
@@ -129,20 +128,9 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         padding: 16px;
                         spacing: 8px;
-                        Text {
-                            text: root.tr("section.status");
-                            font-weight: 700;
-                        }
-
-                        TextEdit {
-                            text <=> root.status-text;
-                            read-only: true;
-                            min-height: 60px;
-                        }
-
-                        if !root.full-features: Text {
-                            text: root.tr("gui.warn.no_full");
-                        }
+                        Text { text: root.tr("section.status"); font-weight: 700; }
+                        TextEdit { text <=> root.status-text; read-only: true; min-height: 60px; }
+                        if !root.full-features: Text { text: root.tr("gui.warn.no_full"); }
                     }
                 }
 
@@ -153,36 +141,14 @@ export component AppWindow inherits Window {
                         padding: 16px;
                         spacing: 8px;
                         HorizontalLayout {
-                            Text {
-                                text: root.tr("gui.log.title");
-                                font-weight: 700;
-                                font-size: 16px;
-                                vertical-alignment: center;
-                            }
-
+                            Text { text: root.tr("gui.log.title"); font-weight: 700; font-size: 16px; vertical-alignment: center; }
                             HorizontalLayout {
                                 alignment: end;
-                                Button {
-                                    height: 30px;
-                                    width: 80px;
-                                    text: root.tr("btn.clear-log");
-                                    clicked => { root.clear-log(); }
-                                }
+                                Button { height: 30px; width: 80px; text: root.tr("btn.clear-log"); clicked => { root.clear-log(); } }
                             }
                         }
-
-                        if root.last-error != "": Text {
-                            text: root.tr("gui.warn.recent_error") + root.last-error;
-                            color: #dc3730;
-                            font-size: 16px;
-                        }
-                        TextEdit {
-                            text <=> root.log-text;
-                            read-only: true;
-                            min-height: 100px;
-                            preferred-height: 200px;
-                            viewport-y <=> root.log-viewport-y;
-                        }
+                        if root.last-error != "": Text { text: root.tr("gui.warn.recent_error") + root.last-error; color: #dc3730; font-size: 16px; }
+                        TextEdit { text <=> root.log-text; read-only: true; min-height: 100px; preferred-height: 200px; viewport-y <=> root.log-viewport-y; }
                     }
                 }
             }
@@ -198,11 +164,7 @@ export component AppWindow inherits Window {
                         VerticalLayout {
                             padding: 16px;
                             spacing: 10px;
-                            Text {
-                                text: root.tr("section.patches");
-                                font-weight: 700;
-                                font-size: 16px;
-                            }
+                            Text { text: root.tr("section.patches"); font-weight: 700; font-size: 16px; }
 
                             HorizontalLayout {
                                 spacing: 10px;
@@ -224,11 +186,7 @@ export component AppWindow inherits Window {
                                     if !root.custom-mode: ComboBox { model: root.model-presets; current-index <=> root.model-idx; width: 320px; }
                                     if root.custom-mode: LineEdit { text <=> root.custom-model-input; placeholder-text: root.tr("hint.model.code"); width: 320px; }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        primary: true;
-                                        text: root.tr("btn.apply");
-                                        enabled: root.full-features;
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.full-features;
                                         clicked => {
                                             if root.custom-mode { root.apply-device(root.custom-model-input); }
                                             else { root.apply-device(root.model-codes[root.model-idx]); }
@@ -285,11 +243,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 6px;
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        primary: true;
-                                        text: root.tr("btn.apply");
-                                        enabled: root.full-features;
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.apply"); enabled: root.full-features;
                                         clicked => {
                                             if root.custom-mode { root.apply-smbios(root.custom-model-input); }
                                             else { root.apply-smbios(root.model-codes[root.model-idx]); }
@@ -310,41 +264,22 @@ export component AppWindow inherits Window {
 
                             HorizontalLayout {
                                 spacing: 10px;
-                                Text {
-                                    text: root.tr("install.source.manager");
-                                    font-size: 16px;
-                                    font-weight: 700;
-                                    vertical-alignment: center;
-                                    min-width: 260px;
-                                }
+                                Text { text: root.tr("install.source.manager"); font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 260px; }
                                 HorizontalLayout {
                                     alignment: end;
                                     spacing: 6px;
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        primary: true;
-                                        text: root.tr("install.one-click");
+                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
                                         enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => {
-                                            root.manager-source-idx = 0;
-                                            root.install-recommended();
-                                        }
+                                        clicked => { root.manager-source-idx = 0; root.install-recommended(); }
                                     }
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        text: root.manager-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                        height: 30px; width: 110px; text: root.manager-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
                                         enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => {
-                                            root.continuity-manual = false;
-                                            root.manager-manual = !root.manager-manual;
-                                        }
+                                        clicked => { root.continuity-manual = false; root.manager-manual = !root.manager-manual; }
                                     }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        text: root.tr("gui.uninstall.product");
+                                        height: 30px; width: 80px; text: root.tr("section.uninstall");
                                         enabled: root.full-features && !root.downloading;
                                         clicked => { root.request-uninstall(); }
                                     }
@@ -357,74 +292,49 @@ export component AppWindow inherits Window {
                                 Text { text: root.tr("install.requirement.installer"); wrap: word-wrap; }
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    LineEdit { text <=> root.url-input; enabled: !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
+                                    LineEdit { text <=> root.manager-url-input; enabled: !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
                                     Button {
-                                        height: 30px;
-                                        width: 166px;
-                                        primary: true;
-                                        text: root.tr("install.download.and.install");
-                                        enabled: !root.downloading && root.url-input != "";
-                                        clicked => { root.download-and-install(root.url-input); }
+                                        height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install");
+                                        enabled: !root.downloading && root.manager-url-input != "";
+                                        clicked => { root.download-and-install-manager(root.manager-url-input); }
                                     }
                                 }
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    LineEdit { text <=> root.path-input; enabled: !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: !root.downloading; clicked => { root.browse-installer(); } }
+                                    LineEdit { text <=> root.manager-path-input; enabled: !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: !root.downloading; clicked => { root.browse-manager-installer(); } }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        primary: true;
-                                        text: root.tr("btn.start-install");
-                                        enabled: !root.downloading && root.path-input != "";
-                                        clicked => { root.start-install(root.path-input); }
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install");
+                                        enabled: !root.downloading && root.manager-path-input != "";
+                                        clicked => { root.start-manager-install(root.manager-path-input); }
                                     }
                                 }
                             }
 
                             HorizontalLayout {
                                 spacing: 10px;
-                                Text {
-                                    text: root.tr("install.kind.continuity");
-                                    font-size: 16px;
-                                    font-weight: 700;
-                                    vertical-alignment: center;
-                                    min-width: 180px;
-                                }
+                                Text { text: root.tr("install.kind.continuity"); font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 180px; }
                                 ComboBox {
-                                    model: [root.tr("install.source.continuity"), root.tr("install.source.hyperconnect-beta")];
+                                    model: ["OS3", "OS4"];
                                     current-index <=> root.continuity-source-idx;
-                                    width: 260px;
+                                    width: 120px;
                                     enabled: !root.downloading && !root.full-features && !root.continuity-available;
                                 }
                                 HorizontalLayout {
                                     alignment: end;
                                     spacing: 6px;
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        primary: true;
-                                        text: root.tr("install.one-click");
+                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
                                         enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => {
-                                            root.manager-source-idx = root.continuity-source-idx + 1;
-                                            root.install-recommended();
-                                        }
+                                        clicked => { root.manager-source-idx = root.continuity-source-idx + 1; root.install-recommended(); }
                                     }
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        text: root.continuity-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                        height: 30px; width: 110px; text: root.continuity-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
                                         enabled: !root.downloading && !root.full-features && !root.continuity-available;
-                                        clicked => {
-                                            root.manager-manual = false;
-                                            root.continuity-manual = !root.continuity-manual;
-                                        }
+                                        clicked => { root.manager-manual = false; root.continuity-manual = !root.continuity-manual; }
                                     }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        text: root.tr("gui.uninstall.product");
+                                        height: 30px; width: 80px; text: root.tr("section.uninstall");
                                         enabled: root.continuity-available && !root.downloading;
                                         clicked => { root.request-uninstall(); }
                                     }
@@ -440,55 +350,38 @@ export component AppWindow inherits Window {
                                 spacing: 6px;
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    LineEdit { text <=> root.url-input; enabled: !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
+                                    LineEdit { text <=> root.continuity-url-input; enabled: !root.downloading; placeholder-text: root.tr("install.download.placeholder"); }
                                     Button {
-                                        height: 30px;
-                                        width: 166px;
-                                        primary: true;
-                                        text: root.tr("install.download.and.install");
-                                        enabled: !root.downloading && root.url-input != "";
-                                        clicked => { root.download-and-install(root.url-input); }
+                                        height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install");
+                                        enabled: !root.downloading && root.continuity-url-input != "";
+                                        clicked => { root.download-and-install-continuity(root.continuity-url-input); }
                                     }
                                 }
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    LineEdit { text <=> root.path-input; enabled: !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
-                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: !root.downloading; clicked => { root.browse-installer(); } }
+                                    LineEdit { text <=> root.continuity-path-input; enabled: !root.downloading; placeholder-text: root.tr("install.file.placeholder"); }
+                                    Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: !root.downloading; clicked => { root.browse-continuity-installer(); } }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        primary: true;
-                                        text: root.tr("btn.start-install");
-                                        enabled: !root.downloading && root.path-input != "";
-                                        clicked => { root.start-install(root.path-input); }
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install");
+                                        enabled: !root.downloading && root.continuity-path-input != "";
+                                        clicked => { root.start-continuity-install(root.continuity-path-input); }
                                     }
                                 }
                             }
 
                             HorizontalLayout {
                                 spacing: 10px;
-                                Text {
-                                    text: root.xiaoai-source;
-                                    font-size: 16px;
-                                    font-weight: 700;
-                                    vertical-alignment: center;
-                                    min-width: 260px;
-                                }
+                                Text { text: root.xiaoai-source; font-size: 16px; font-weight: 700; vertical-alignment: center; min-width: 260px; }
                                 HorizontalLayout {
                                     alignment: end;
                                     spacing: 6px;
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        primary: true;
-                                        text: root.tr("install.one-click");
+                                        height: 30px; width: 110px; primary: true; text: root.tr("install.one-click");
                                         enabled: !root.xiaoai-busy && !root.xiaoai-available;
                                         clicked => { root.install-recommended-xiaoai(); }
                                     }
                                     Button {
-                                        height: 30px;
-                                        width: 110px;
-                                        text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
+                                        height: 30px; width: 110px; text: root.xiaoai-manual ? root.tr("install.hide-manual") : root.tr("install.manual");
                                         enabled: !root.xiaoai-busy && !root.xiaoai-available;
                                         clicked => { root.xiaoai-manual = !root.xiaoai-manual; }
                                     }
@@ -503,10 +396,7 @@ export component AppWindow inherits Window {
                                     spacing: 6px;
                                     LineEdit { text <=> root.xiaoai-url-input; enabled: !root.xiaoai-busy; placeholder-text: root.tr("install.download.placeholder"); }
                                     Button {
-                                        height: 30px;
-                                        width: 166px;
-                                        primary: true;
-                                        text: root.tr("install.download.and.install");
+                                        height: 30px; width: 166px; primary: true; text: root.tr("install.download.and.install");
                                         enabled: !root.xiaoai-busy && root.xiaoai-url-input != "";
                                         clicked => { root.download-and-install-xiaoai(root.xiaoai-url-input); }
                                     }
@@ -516,10 +406,7 @@ export component AppWindow inherits Window {
                                     LineEdit { text <=> root.xiaoai-path-input; enabled: !root.xiaoai-busy; placeholder-text: root.tr("install.file.placeholder"); }
                                     Button { height: 30px; width: 80px; text: root.tr("btn.select"); enabled: !root.xiaoai-busy; clicked => { root.browse-xiaoai-installer(); } }
                                     Button {
-                                        height: 30px;
-                                        width: 80px;
-                                        primary: true;
-                                        text: root.tr("btn.start-install");
+                                        height: 30px; width: 80px; primary: true; text: root.tr("btn.start-install");
                                         enabled: !root.xiaoai-busy && root.xiaoai-path-input != "";
                                         clicked => { root.start-xiaoai-install(root.xiaoai-path-input); }
                                     }
@@ -534,12 +421,7 @@ export component AppWindow inherits Window {
                                     Rectangle { width: parent.width * root.manager-progress; background: Palette.accent-background; }
                                 }
                                 Text { text: root.manager-progress-text; }
-                                Button {
-                                    height: 30px;
-                                    text: root.tr("install.cancel-download");
-                                    enabled: root.manager-download-active;
-                                    clicked => { root.cancel-download(); }
-                                }
+                                Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.manager-download-active; clicked => { root.cancel-download(); } }
                             }
 
                             if root.xiaoai-busy: VerticalLayout {
@@ -550,21 +432,12 @@ export component AppWindow inherits Window {
                                     Rectangle { width: parent.width * root.xiaoai-progress; background: Palette.accent-background; }
                                 }
                                 Text { text: root.xiaoai-progress-text; }
-                                Button {
-                                    height: 30px;
-                                    text: root.tr("install.cancel-download");
-                                    enabled: root.xiaoai-download-active;
-                                    clicked => { root.cancel-xiaoai-download(); }
-                                }
+                                Button { height: 30px; text: root.tr("install.cancel-download"); enabled: root.xiaoai-download-active; clicked => { root.cancel-xiaoai-download(); } }
                             }
 
                             HorizontalLayout {
                                 alignment: end;
-                                Button {
-                                    height: 30px;
-                                    text: root.tr("gui.uninstall.msix");
-                                    clicked => { root.uninstall-msix(); }
-                                }
+                                Button { height: 30px; text: root.tr("gui.uninstall.msix"); clicked => { root.uninstall-msix(); } }
                             }
                         }
                     }
