@@ -52,79 +52,16 @@ jobs:
         run: cargo build --release --bin MiPCM_GUI
 
       - name: Stage preview executable
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.gui_preview)
+        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target\release\MiPCM_GUI.exe dist\MiPCM_Patch_UI_Preview.exe
 
       - name: Upload GUI preview
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.gui_preview)
+        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
         uses: actions/upload-artifact@v4
         with:
           name: MiPCM-Patch-Unified-Preview
           path: dist/MiPCM_Patch_UI_Preview.exe
           retention-days: 3
-
-  retire-temporary-branches:
-    needs: windows
-    if: >-
-      github.event_name == 'push' &&
-      github.repository == 'YYplus/MiPCManager_Patch' &&
-      startsWith(github.event.head_commit.message, 'ci: retire reviewed temporary branches')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-      - name: Retire reviewed temporary branches
-        env:
-          VERIFIED_HEAD: ${{ github.sha }}
-        run: |
-          python - <<'PY'
-          import os
-          import subprocess
-
-          def branches():
-              output = subprocess.check_output(
-                  ['git', 'ls-remote', '--heads', 'origin'], text=True
-              )
-              return {ref: sha for sha, ref in (line.split() for line in output.splitlines())}
-
-          preserved = {
-              'refs/heads/main': '1f9b0e75231add43d09c3276dc68ad6dd251cd0c',
-              'refs/heads/feature/xiaomi-share-context-menu': '356f50abf4f0f2d6dcbd7a09e4f94ec6c7e39f2f',
-              'refs/heads/feature/one-click-install': os.environ['VERIFIED_HEAD'],
-          }
-          reviewed = {
-              'refs/heads/ci/one-click-install-check': '8d1fe86f5b4fa7e0839a5b43c7a452012487a0b7',
-              'refs/heads/tmp/ui-preview-build-base': '51b502350075b0449bb0580c439c3ce1f9a575bc',
-              'refs/heads/tmp/integration-safety': '22b745dd386b3453e2c17c2de5e0fc8c55bc651d',
-          }
-          before = branches()
-          for ref, sha in preserved.items():
-              if before.get(ref) != sha:
-                  raise SystemExit(f'Preserved branch changed: {ref}; retain temporary branches.')
-          pending = []
-          for ref, sha in reviewed.items():
-              if ref not in before:
-                  print(f'Already absent: {ref}')
-              elif before[ref] != sha:
-                  raise SystemExit(f'Temporary branch advanced: {ref}; retain temporary branches.')
-              else:
-                  pending.append(ref)
-          if pending:
-              command = ['git', 'push', '--atomic']
-              command.extend(f'--force-with-lease={ref}:{reviewed[ref]}' for ref in pending)
-              command.append('origin')
-              command.extend(f':{ref}' for ref in pending)
-              subprocess.run(command, check=True)
-          after = branches()
-          if any(after.get(ref) != sha for ref, sha in preserved.items()):
-              raise SystemExit('Preserved branch changed during cleanup.')
-          if any(ref in after for ref in reviewed):
-              raise SystemExit('Temporary branch cleanup is incomplete.')
-          print('Reviewed temporary branches removed; preserved branches are unchanged.')
-          PY

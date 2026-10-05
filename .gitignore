@@ -1,5 +1,7 @@
 /target
 /target_alt
+/dist
+/release-assets
 
 # 补丁运行时产物
 *.orig.bak
@@ -11,4 +13,3 @@
 
 # For Personally Using Dev Docs
 /devdocs
-

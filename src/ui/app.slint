@@ -51,11 +51,8 @@ export component AppWindow inherits Window {
     in-out property <bool> manager-manual: false;
     in-out property <bool> continuity-manual: false;
     in-out property <bool> xiaoai-manual: false;
-    in-out property <[string]> manager-sources;
-    in-out property <[string]> manager-requirements;
     in-out property <int> manager-source-idx: 0;
     in-out property <int> continuity-source-idx: 0;
-    in-out property <string> xiaoai-source;
     in-out property <float> manager-progress: 0;
     in-out property <string> manager-progress-text;
     in-out property <bool> manager-download-active: false;
@@ -79,7 +76,6 @@ export component AppWindow inherits Window {
 
     pure callback tr(string) -> string;
 
-    callback refresh();
     callback apply-locale();
     callback revert-locale();
     callback apply-device(string);
@@ -110,7 +106,6 @@ export component AppWindow inherits Window {
     callback download-and-install-xiaoai(string);
     callback browse-xiaoai-installer();
     callback start-xiaoai-install(string);
-    callback uninstall-msix();
     callback request-uninstall(int);
     callback request-xiaoai-uninstall();
     callback confirm-uninstall();

@@ -34,19 +34,6 @@ fn main() {
 
     app.on_tr(move |key: SharedString| -> SharedString { i18n::tr(key.as_str(), lang).into() });
 
-    let sources = ops::RecommendedInstaller::MANAGER_VARIANTS;
-    app.set_manager_sources(ModelRc::new(VecModel::from(
-        sources
-            .map(|source| SharedString::from(source.label(lang)))
-            .to_vec(),
-    )));
-    app.set_manager_requirements(ModelRc::new(VecModel::from(
-        sources
-            .map(|source| SharedString::from(source.requirement(lang)))
-            .to_vec(),
-    )));
-    app.set_xiaoai_source(ops::RecommendedInstaller::Xiaoai.label(lang).into());
-
     let presets: Vec<SharedString> = ds::PRESETS
         .iter()
         .map(|p| SharedString::from(format!("{} · {}", p.code, p.name)))
@@ -362,11 +349,6 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
     let manager_download = Rc::new(RefCell::new(None::<ops::DownloadControl>));
     let xiaoai_download = Rc::new(RefCell::new(None::<ops::DownloadControl>));
 
-    app.on_refresh({
-        let app_weak = app_weak.clone();
-        move || refresh(&app_weak.unwrap())
-    });
-
     app.on_apply_xiaomi_share_menu({
         let app_weak = app_weak.clone();
         move || {
@@ -563,16 +545,6 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let app = app_weak.unwrap();
             app.set_log_text("".into());
             app.set_last_error("".into());
-        }
-    });
-    app.on_uninstall_msix({
-        let app_weak = app_weak.clone();
-        move || {
-            run_patch(
-                &app_weak.unwrap(),
-                i18n::tr("gui.op.uninstall.msix", lang),
-                || ops::uninstall_msix(false),
-            )
         }
     });
     app.on_request_uninstall({
