@@ -24,7 +24,6 @@ use super::{theme, widgets};
 // ── Log message ───────────────────────────────────────────────────
 pub enum LogMessage {
     Line(String),
-<<<<<<< HEAD
     DownloadProgress(ops::DownloadProgress),
     Done,
     Error(String),
@@ -34,10 +33,6 @@ pub enum LogMessage {
         full_features: bool,
         share_state: ops::ShellMenuState,
     },
-=======
-    Done { share_menu: bool },
-    Error { message: String, share_menu: bool },
->>>>>>> origin/feature/xiaomi-share-context-menu
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────
@@ -100,7 +95,6 @@ impl PatchRow {
             PatchRow::Xiaoai,
             PatchRow::Smbios,
             PatchRow::DualNic,
-            PatchRow::ShareMenu,
         ]
     }
 
@@ -164,19 +158,11 @@ impl PatchRow {
             }
             (PatchRow::ShareMenu, 0) => {
                 let label = i18n::tr("tui.op.share-menu.apply", lang).to_string();
-<<<<<<< HEAD
                 spawn_op(tx.clone(), label, lang, ops::apply_share_menu);
             }
             (PatchRow::ShareMenu, 1) => {
                 let label = i18n::tr("tui.op.share-menu.revert", lang).to_string();
                 spawn_op(tx.clone(), label, lang, ops::revert_share_menu);
-=======
-                spawn_share_menu_op(tx.clone(), label, ops::apply_xiaomi_share_menu);
-            }
-            (PatchRow::ShareMenu, 1) => {
-                let label = i18n::tr("tui.op.share-menu.revert", lang).to_string();
-                spawn_share_menu_op(tx.clone(), label, ops::revert_xiaomi_share_menu);
->>>>>>> origin/feature/xiaomi-share-context-menu
             }
             (PatchRow::Camera, 0) => {
                 let label = i18n::tr("tui.op.camera.apply", lang).to_string();
@@ -519,7 +505,6 @@ impl App {
             }
             KeyCode::Enter => {
                 let patch = PatchRow::all()[self.patch_idx];
-<<<<<<< HEAD
                 self.op_running = true;
                 self.status_generation += 1;
                 self.op_label = format!(
@@ -527,16 +512,6 @@ impl App {
                     patch.label(self.lang),
                     patch.btn_labels(self.lang)[self.patch_btn_idx]
                 );
-=======
-                if patch == PatchRow::ShareMenu {
-                    self.op_running = true;
-                    self.op_label = match self.patch_btn_idx {
-                        0 => i18n::tr("tui.op.share-menu.apply", self.lang),
-                        _ => i18n::tr("tui.op.share-menu.revert", self.lang),
-                    }
-                    .to_string();
-                }
->>>>>>> origin/feature/xiaomi-share-context-menu
                 let tx = self.tx.clone();
                 patch.btn_execute(self.patch_btn_idx, self, self.lang, &tx);
             }
@@ -707,7 +682,6 @@ impl App {
                     self.log.push(line);
                     self.log_scroll = self.log.len().saturating_sub(1);
                 }
-<<<<<<< HEAD
                 Ok(LogMessage::Done) => {
                     self.op_running = false;
                     self.op_label.clear();
@@ -748,26 +722,6 @@ impl App {
                     } else {
                         self.refresh_status();
                     }
-=======
-                Ok(LogMessage::Done { share_menu }) => {
-                    if share_menu {
-                        self.op_running = false;
-                        self.op_label.clear();
-                    }
-                    self.refresh_status();
-                }
-                Ok(LogMessage::Error {
-                    message,
-                    share_menu,
-                }) => {
-                    self.log.push(format!("✗ {message}"));
-                    if share_menu {
-                        self.op_running = false;
-                        self.op_label.clear();
-                    }
-                    self.log_scroll = self.log.len().saturating_sub(1);
-                    self.refresh_status();
->>>>>>> origin/feature/xiaomi-share-context-menu
                 }
                 Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
             }
@@ -1101,20 +1055,6 @@ fn spawn_op<F>(tx: Sender<LogMessage>, label: String, _lang: Lang, f: F)
 where
     F: FnOnce() -> Result<Vec<String>> + Send + 'static,
 {
-    spawn_op_inner(tx, label, false, f);
-}
-
-fn spawn_share_menu_op<F>(tx: Sender<LogMessage>, label: String, f: F)
-where
-    F: FnOnce() -> Result<Vec<String>> + Send + 'static,
-{
-    spawn_op_inner(tx, label, true, f);
-}
-
-fn spawn_op_inner<F>(tx: Sender<LogMessage>, label: String, share_menu: bool, f: F)
-where
-    F: FnOnce() -> Result<Vec<String>> + Send + 'static,
-{
     std::thread::spawn(move || {
         let _ = tx.send(LogMessage::Line(format!("—— {label} ——")));
         match f() {
@@ -1123,14 +1063,11 @@ where
                     let _ = tx.send(LogMessage::Line(line));
                 }
                 let _ = tx.send(LogMessage::Line(format!("✓ {label} 完成")));
-                let _ = tx.send(LogMessage::Done { share_menu });
             }
             Err(e) => {
-                let _ = tx.send(LogMessage::Error {
-                    message: format!("✗ {label}: {e:#}"),
-                    share_menu,
-                });
+                let _ = tx.send(LogMessage::Error(format!("✗ {label}: {e:#}")));
             }
         }
+        let _ = tx.send(LogMessage::Done);
     });
 }

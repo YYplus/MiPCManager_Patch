@@ -57,17 +57,26 @@ pub fn runtime_native_dir(version_dir: &Path) -> PathBuf {
 
 fn find_product_root(default_root: &str, product_dir: &str) -> Option<PathBuf> {
     let default = PathBuf::from(default_root);
-    if default.is_dir() {
+    if is_valid_product_root(&default) {
         return Some(default);
     }
     // 退而求其次：%ProgramFiles%\MI\<product_dir>
     if let Ok(pf) = std::env::var("ProgramFiles") {
         let p = Path::new(&pf).join("MI").join(product_dir);
-        if p.is_dir() {
+        if is_valid_product_root(&p) {
             return Some(p);
         }
     }
     None
+}
+
+fn is_valid_product_root(root: &Path) -> bool {
+    if !root.is_dir() {
+        return false;
+    }
+    latest_version_dir(root)
+        .ok()
+        .is_some_and(|version_dir| version_dir.is_dir())
 }
 
 /// 在安装根目录下找出版本号最高的版本目录（形如 `5.8.0.14`）。
@@ -104,6 +113,65 @@ fn parse_version(s: &str) -> Option<Vec<u64>> {
         .map(|p| p.parse::<u64>().ok())
         .collect::<Option<_>>()?;
     if parts.is_empty() { None } else { Some(parts) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_product_root, is_valid_product_root, latest_version_dir};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(tag: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "mipcm-install-detect-{tag}-{}-{stamp}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn empty_product_directory_is_invalid() {
+        let root = make_temp_dir("empty");
+        assert!(!is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn residue_without_numeric_version_directory_is_invalid() {
+        let root = make_temp_dir("residue");
+        fs::create_dir_all(root.join("cache")).expect("create cache dir");
+        fs::create_dir_all(root.join("logs")).expect("create logs dir");
+        fs::create_dir_all(root.join("v5.8.0")).expect("create non-version dir");
+        assert!(!is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn root_with_numeric_version_directory_is_valid() {
+        let root = make_temp_dir("valid");
+        let old = root.join("1.9.0.0");
+        let latest = root.join("2.0.0.1");
+        fs::create_dir_all(&old).expect("create old version dir");
+        fs::create_dir_all(&latest).expect("create latest version dir");
+        assert!(is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert_eq!(
+            find_product_root(&root_str, "XiaomiPCManager"),
+            Some(root.clone())
+        );
+        assert_eq!(latest_version_dir(&root).expect("latest version"), latest);
+        fs::remove_dir_all(root).ok();
+    }
 }
 
 /// 关闭小米电脑管家相关进程。
