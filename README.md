@@ -14,9 +14,15 @@
 | 📷 **抑制摄像头误报弹窗** | 屏蔽「摄像头暂不可用，点击确定打开设备管理器」这类本机摄像头被误判禁用的弹窗 |
 | 🔊 **音频流转增强** | 在无线 WiFi 与有线 LAN 之间切换音频流转的网络介质 |
 | 💻 **设备伪装** | 伪装为指定机型，解锁机型相关功能 |
+<<<<<<< HEAD
 | 📤 **Windows 11 右键小米互传** | 在文件和文件夹一级右键菜单中启用/关闭「使用小米互传发送」 |
 | 📦 **安装电脑管家 / 小米互联** | 选择电脑管家、互联 Windows 版或内测版，一键下载并启动安装；也可手动指定链接或本地安装包 |
 | 📦 **安装超级小爱** | 一键下载并安装，安装完成后向实际版本目录部署专用 `userenv.dll`（不限制版本） |
+=======
+| 📤 **Windows 11 右键小米互传** | 一键在文件和文件夹一级右键菜单中启用/关闭「使用小米互传发送」 |
+| 📦 **安装小米电脑管家** | 自动查找或下载安装包，释放必要的补丁文件后启动安装 |
+| 📦 **安装超级小爱** | 辅助运行安装包，安装完成后向实际版本目录部署专用 `userenv.dll`（不限制版本） |
+>>>>>>> origin/feature/xiaomi-share-context-menu
 | 📊 **状态查看** | 检查当前安装位置、各补丁状态 |
 
 每个功能均提供还原路径，补丁操作按当前状态执行并尽量保持幂等。
@@ -80,10 +86,14 @@ MiPCM_CLI.exe device revert
 MiPCM_CLI.exe share-menu apply
 MiPCM_CLI.exe share-menu revert
 
+<<<<<<< HEAD
 # 安装小米电脑管家 / 小米互联
 MiPCM_CLI.exe install --recommended
 MiPCM_CLI.exe install --recommended continuity
 MiPCM_CLI.exe install --recommended hyperconnect-beta
+=======
+# 安装小米电脑管家
+>>>>>>> origin/feature/xiaomi-share-context-menu
 MiPCM_CLI.exe install
 MiPCM_CLI.exe install --installer "D:\path\to\installer.exe"
 
@@ -127,7 +137,11 @@ TUI 的「安装」面板按 ↑↓ 选择内置安装来源，按 Enter 下载�
 <details>
 <summary>只安装了「小米互联 / 互联互通」能用吗？</summary>
 
+<<<<<<< HEAD
 「小米互联 / 互联互通」(PcContinuity / HyperConnect 2.0) 支持**地区伪装**；Windows 11 右键小米互传功能独立于完整版电脑管家的摄像头、音频和设备伪装补丁。摄像头弹窗、音频流转、设备伪装等功能需要完整版「小米电脑管家」(XiaomiPCManager)。
+=======
+「小米互联 / 互联互通」(PcContinuity / HyperConnect 2.0) 支持**地区伪装**和 **Windows 11 右键小米互传**。摄像头弹窗、音频流转、设备伪装等功能需要完整版「小米电脑管家」(XiaomiPCManager)。
+>>>>>>> origin/feature/xiaomi-share-context-menu
 </details>
 
 <details>

@@ -306,6 +306,16 @@ fn run(cmd: Command, lang: i18n::Lang) -> Result<()> {
                 Ok(())
             }
         },
+        Command::ShareMenu { action } => match action {
+            ShareMenuAction::Apply => {
+                print_log(ops::apply_xiaomi_share_menu()?);
+                Ok(())
+            }
+            ShareMenuAction::Revert => {
+                print_log(ops::revert_xiaomi_share_menu()?);
+                Ok(())
+            }
+        },
         Command::Camera { action } => match action {
             PatchAction::Apply { dll, no_kill } => {
                 print_log(ops::apply_camera(dll, no_kill)?);

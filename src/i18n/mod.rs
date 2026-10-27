@@ -106,8 +106,11 @@ tr_table!(tr_zh, {
     // ── 补丁标签 ──
     "patch.locale" => "地区伪装",
     "patch.share-menu" => "右键小米互传",
+<<<<<<< HEAD
     "patch.share-menu.detail" => "Windows 11 右键小米互传",
     "patch.share-menu.desc" => "在文件和文件夹一级右键菜单中添加“使用小米互传发送”",
+=======
+>>>>>>> origin/feature/xiaomi-share-context-menu
     "patch.camera" => "摄像头弹窗",
     "patch.audio" => "音频流转",
     "patch.device" => "设备伪装",
@@ -115,6 +118,7 @@ tr_table!(tr_zh, {
     "patch.smbios" => "Lyra SMBIOS (实验性)",
     "patch.dual-nic" => "Lyra 双网卡 (实验性)",
     "patch.locale.detail" => "地区伪装 (micont_rtm.dll)",
+    "patch.share-menu.detail" => "Windows 11 右键小米互传",
     "patch.camera.detail" => "摄像头弹窗抑制 (PcControlCenter.dll)",
     "patch.audio.detail" => "音频流转广播模式",
     "patch.device.detail" => "设备伪装 (msimg32.dll)",
@@ -122,6 +126,7 @@ tr_table!(tr_zh, {
     "patch.smbios.detail" => "[实验性] SMBIOS 设备身份",
     "patch.dualnic.detail" => "Lyra 双网卡音频修复",
     "patch.locale.desc" => "伪装地区为中国大陆，解锁区域功能",
+    "patch.share-menu.desc" => "在文件和文件夹一级右键菜单中添加‘使用小米互传发送’",
     "patch.camera.desc" => "抑制摄像头状态确认弹窗",
     "patch.audio.desc" => "切换广播模式 / 修复双网卡音频断流",
     "patch.device.desc" => "释放 msimg32.dll 代理 + 写入机型注册表",
@@ -224,6 +229,8 @@ tr_table!(tr_zh, {
     "gui.downloading.start" => "开始下载: {url}",
 
     // ── GUI 安装操作标签 ──
+    "gui.op.share-menu.apply" => "右键小米互传·应用",
+    "gui.op.share-menu.revert" => "右键小米互传·还原",
     "gui.op.locale.apply" => "地区伪装",
     "gui.op.share-menu.apply" => "右键小米互传 · 应用",
     "gui.op.share-menu.revert" => "右键小米互传 · 还原",
@@ -327,6 +334,8 @@ tr_table!(tr_zh, {
     "tui.log.uninstall.fetch.error" => "✗ 获取卸载信息失败: {error}",
 
     // ── TUI 操作标签 ──
+    "tui.op.share-menu.apply" => "右键小米互传 · 应用",
+    "tui.op.share-menu.revert" => "右键小米互传 · 还原",
     "tui.op.locale.apply" => "地区伪装 · 应用",
     "tui.op.share-menu.apply" => "右键小米互传 · 应用",
     "tui.op.share-menu.revert" => "右键小米互传 · 还原",
@@ -422,8 +431,11 @@ tr_table!(tr_en, {
     // ── 补丁标签 ──
     "patch.locale" => "Locale Spoof",
     "patch.share-menu" => "Xiaomi Share Menu",
+<<<<<<< HEAD
     "patch.share-menu.detail" => "Windows 11 Xiaomi Share Menu",
     "patch.share-menu.desc" => "Add Send with Xiaomi Share to the first-level file and folder context menu",
+=======
+>>>>>>> origin/feature/xiaomi-share-context-menu
     "patch.camera" => "Camera Toast",
     "patch.audio" => "Audio Stream",
     "patch.device" => "Device Spoof",
@@ -431,6 +443,7 @@ tr_table!(tr_en, {
     "patch.smbios" => "Lyra SMBIOS (Experimental)",
     "patch.dual-nic" => "Lyra Dual NIC (Experimental)",
     "patch.locale.detail" => "Locale Spoof (micont_rtm.dll)",
+    "patch.share-menu.detail" => "Windows 11 Xiaomi Share Context Menu",
     "patch.camera.detail" => "Camera Toast Suppression (PcControlCenter.dll)",
     "patch.audio.detail" => "Audio Stream Broadcast Mode",
     "patch.device.detail" => "Device Spoof (msimg32.dll)",
@@ -438,6 +451,7 @@ tr_table!(tr_en, {
     "patch.smbios.detail" => "[Experimental] SMBIOS Device Identity",
     "patch.dualnic.detail" => "[Experimental] Dual NIC Audio Fix",
     "patch.locale.desc" => "Spoof region to China Mainland, unlock regional features",
+    "patch.share-menu.desc" => "Add ‘Send with Xiaomi Share’ to the first-level file and folder context menu",
     "patch.camera.desc" => "Suppress camera status confirmation toast",
     "patch.audio.desc" => "Switch broadcast mode / fix dual-NIC audio dropout",
     "patch.device.desc" => "Deploy msimg32.dll proxy + write registry model",
@@ -540,6 +554,8 @@ tr_table!(tr_en, {
     "gui.downloading.start" => "Downloading: {url}",
 
     // ── GUI 安装操作标签 ──
+    "gui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
+    "gui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",
     "gui.op.locale.apply" => "Locale Spoof",
     "gui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
     "gui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",
@@ -643,6 +659,8 @@ tr_table!(tr_en, {
     "tui.log.uninstall.fetch.error" => "✗ Failed to get uninstall info: {error}",
 
     // ── TUI 操作标签 ──
+    "tui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
+    "tui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",
     "tui.op.locale.apply" => "Locale Spoof · Apply",
     "tui.op.share-menu.apply" => "Xiaomi Share Menu · Apply",
     "tui.op.share-menu.revert" => "Xiaomi Share Menu · Revert",

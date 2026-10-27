@@ -48,6 +48,7 @@ export component AppWindow inherits Window {
     in-out property <length> log-viewport-y: 0px;
     in-out property <bool> downloading: false;
     in-out property <bool> xiaoai-busy: false;
+<<<<<<< HEAD
     in-out property <bool> manager-manual: false;
     in-out property <bool> continuity-manual: false;
     in-out property <bool> xiaoai-manual: false;
@@ -59,6 +60,9 @@ export component AppWindow inherits Window {
     in-out property <float> xiaoai-progress: 0;
     in-out property <string> xiaoai-progress-text;
     in-out property <bool> xiaoai-download-active: false;
+=======
+    in-out property <bool> share-menu-busy: false;
+>>>>>>> origin/feature/xiaomi-share-context-menu
     in-out property <bool> show-confirm: false;
     in-out property <int> confirm-product: 0;
     in-out property <string> confirm-desc;
@@ -76,6 +80,12 @@ export component AppWindow inherits Window {
 
     pure callback tr(string) -> string;
 
+<<<<<<< HEAD
+=======
+    callback refresh();
+    callback apply-xiaomi-share-menu();
+    callback revert-xiaomi-share-menu();
+>>>>>>> origin/feature/xiaomi-share-context-menu
     callback apply-locale();
     callback revert-locale();
     callback apply-device(string);
@@ -178,6 +188,36 @@ export component AppWindow inherits Window {
                                     Button { height: 34px; width: 96px; primary: true; text: root.tr("install.one-click"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.manager-source-idx = 0; root.install-recommended(); } }
                                     Button { height: 34px; width: 96px; text: root.tr("install.manual"); enabled: root.controls-ready && !root.downloading && !root.full-features && !root.continuity-available; clicked => { root.continuity-manual = false; root.xiaoai-manual = false; root.manager-manual = !root.manager-manual; } }
                                     Button { height: 34px; width: 64px; text: root.tr("section.uninstall"); enabled: root.controls-ready && root.full-features && !root.downloading; clicked => { root.request-uninstall(0); } }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Text {
+                                    text: root.tr("patch.share-menu");
+                                    vertical-alignment: center;
+                                    min-width: 90px;
+                                    font-size: 16px;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        primary: true;
+                                        text: root.tr("btn.apply");
+                                        enabled: !root.share-menu-busy;
+                                        clicked => { root.apply-xiaomi-share-menu(); }
+                                    }
+
+                                    Button {
+                                        height: 30px;
+                                        width: 80px;
+                                        text: root.tr("btn.revert");
+                                        enabled: !root.share-menu-busy;
+                                        clicked => { root.revert-xiaomi-share-menu(); }
+                                    }
                                 }
                             }
                         }

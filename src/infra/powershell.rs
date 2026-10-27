@@ -44,6 +44,11 @@ pub fn run_powershell_strict(script: &str) -> Result<String> {
 ///
 /// 路径、URL 等外部数据不应插值到 PowerShell 源码中；通过环境变量传递可避免
 /// 引号、反引号、`$()` 等字符参与脚本解析。
+<<<<<<< HEAD
+=======
+///
+/// 任何非零退出码都返回错误，同时保留 stdout/stderr 便于诊断。
+>>>>>>> origin/feature/xiaomi-share-context-menu
 #[cfg(windows)]
 pub fn run_powershell_with_env_strict(script: &str, env_vars: &[(&str, &OsStr)]) -> Result<String> {
     run_powershell_impl(script, env_vars, true)
