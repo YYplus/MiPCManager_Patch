@@ -43,6 +43,7 @@ pub fn find_xiaoai_root() -> Option<PathBuf> {
 /// - 新版 HyperConnect 2.0：`<版本目录>\resources\native-interconnect\win32`
 /// - XiaomiPCManager 6.0：`<版本目录>\MiSmartShare`
 /// - 旧版 PcContinuity / XiaomiPCManager：版本目录自身
+///
 /// 仅在子目录中存在目标 DLL 时选择它，避免空目录或其他 SDK 干扰定位。
 pub fn runtime_native_dir(version_dir: &Path) -> PathBuf {
     let nested = HYPERCONNECT_NATIVE_REL
