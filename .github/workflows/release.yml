@@ -2,17 +2,6 @@ name: Build and publish Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
-      - src/**
-      - resources/**
-      - assets/**
-      - .github/workflows/release.yml
 
 permissions:
   contents: write

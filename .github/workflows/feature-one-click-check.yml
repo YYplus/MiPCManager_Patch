@@ -1,8 +1,9 @@
-name: Verify unified feature branch
+name: Verify Windows build
 
 on:
   push:
     branches:
+      - main
       - feature/one-click-install
   pull_request:
     branches:
