@@ -1,0 +1,61 @@
+name: Retire merged branches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/retire-merged-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Delete merged branches at reviewed heads
+        env:
+          VERIFIED_HEAD: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+
+          reviewed = {
+              'refs/heads/copilot/featureone-click-install-integration': '89d5838ca9116b5895cefd37f90729c85c16fa67',
+              'refs/heads/feature/one-click-install': '8ce8bdf8da35f6a77607613ebd099b60b9a9cc8a',
+              'refs/heads/feature/xiaomi-share-context-menu': '356f50abf4f0f2d6dcbd7a09e4f94ec6c7e39f2f',
+          }
+
+          def branches():
+              output = subprocess.check_output(['git', 'ls-remote', '--heads', 'origin'], text=True)
+              return {ref: sha for sha, ref in (line.split() for line in output.splitlines())}
+
+          before = branches()
+          expected_main = os.environ['VERIFIED_HEAD']
+          if before.get('refs/heads/main') != expected_main:
+              raise SystemExit('main advanced; stop and review before deleting branches')
+          pending = []
+          for ref, sha in reviewed.items():
+              subprocess.run(['git', 'merge-base', '--is-ancestor', sha, expected_main], check=True)
+              if ref not in before:
+                  print(f'Already deleted: {ref}')
+              elif before[ref] != sha:
+                  raise SystemExit(f'Branch advanced; retain it: {ref}')
+              else:
+                  pending.append(ref)
+          if pending:
+              command = ['git', 'push', '--atomic']
+              command.extend(f'--force-with-lease={ref}:{reviewed[ref]}' for ref in pending)
+              command.append('origin')
+              command.extend(f':{ref}' for ref in pending)
+              subprocess.run(command, check=True)
+          after = branches()
+          if after != {'refs/heads/main': expected_main}:
+              raise SystemExit('Unexpected final branch state')
+          print('Only main remains; all merged commit history is preserved in main.')
+          PY
