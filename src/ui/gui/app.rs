@@ -709,13 +709,13 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
                 return;
             }
             if let Err(e) = ops::ensure_manual_url_kind(&url, InstallerKind::XiaomiPcManager) {
-                append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
+                append_log(&app, i18n::tr("install.row.manager", lang), Err(e));
                 return;
             }
             app.set_manager_source_idx(0);
             *download.borrow_mut() = Some(spawn_install_operation(
                 app_weak.clone(),
-                i18n::tr("install.source.manager", lang).into(),
+                i18n::tr("install.row.manager", lang).into(),
                 InstallProduct::Manager,
                 lang,
                 move |control, progress| {
@@ -742,7 +742,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             }
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter(i18n::tr("gui.browse.filter", lang), &["exe"])
-                .set_title(i18n::tr("install.source.manager", lang))
+                .set_title(i18n::tr("install.row.manager", lang))
                 .pick_file()
             {
                 app_weak
@@ -763,7 +763,7 @@ fn setup_callbacks(app: &AppWindow, lang: i18n::Lang) {
             let path = PathBuf::from(path.to_string());
             if let Err(e) = ops::ensure_manual_installer_kind(&path, InstallerKind::XiaomiPcManager)
             {
-                append_log(&app, i18n::tr("install.source.manager", lang), Err(e));
+                append_log(&app, i18n::tr("install.row.manager", lang), Err(e));
                 return;
             }
             let label =

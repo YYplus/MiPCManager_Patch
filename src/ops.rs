@@ -1334,6 +1334,33 @@ mod tests {
     }
 
     #[test]
+    fn manual_entries_accept_unprefixed_manager_packages_and_reject_wrong_product() {
+        use pc_manager_installer::InstallerKind;
+        let filename = "XiaomiPCManager_dev_6.0.0.39.exe";
+        let installer = Path::new("Downloads").join(filename);
+        let url = format!("https://example.com/{filename}?token=abc");
+        assert!(ensure_manual_installer_kind(&installer, InstallerKind::XiaomiPcManager).is_ok());
+        assert!(ensure_manual_url_kind(&url, InstallerKind::XiaomiPcManager).is_ok());
+        assert!(
+            install_product_from_path(&installer, InstallerKind::PcContinuity)
+                .unwrap_err()
+                .to_string()
+                .contains("安装包类型不匹配")
+        );
+        assert!(
+            download_and_install_product(
+                &url,
+                InstallerKind::PcContinuity,
+                &DownloadControl::default(),
+                |_| {}
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("安装包类型不匹配")
+        );
+    }
+
+    #[test]
     fn independent_manual_entries_reject_the_other_product_before_any_io() {
         use pc_manager_installer::InstallerKind;
         for (source, expected) in [

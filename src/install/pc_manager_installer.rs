@@ -46,7 +46,7 @@ const HYPERCONNECT_MARKER: &str = "hyperconnect";
 /// 根据文件名判定安装包所属产品；非安装包返回 `None`。
 ///
 /// 识别四类命名：
-/// - `*_XiaomiPCManager_*.exe`（完整版小米电脑管家）。
+/// - `XiaomiPCManager_*.exe` 或 `*_XiaomiPCManager_*.exe`（完整版小米电脑管家）。
 /// - 含「小米互联」且以 `.exe` 结尾（小米互联最新版本_1.1.2.36_d887cad6.exe 等）。
 /// - 含 `HyperConnect` 且以 `.exe` 结尾（互联互通 2.0 安装包）。
 /// - 含 `PcContinuity` 且以 `.exe` 结尾（小米互联 Windows 安装包）。
@@ -64,8 +64,11 @@ pub fn classify_installer_filename(name: &str) -> Option<InstallerKind> {
     }
     let stem = lower.strip_suffix(".exe")?;
     if stem
-        .split_once("_xiaomipcmanager_")
-        .is_some_and(|(prefix, suffix)| !prefix.is_empty() && !suffix.is_empty())
+        .strip_prefix("xiaomipcmanager_")
+        .is_some_and(|suffix| !suffix.is_empty())
+        || stem
+            .split_once("_xiaomipcmanager_")
+            .is_some_and(|(prefix, suffix)| !prefix.is_empty() && !suffix.is_empty())
     {
         return Some(InstallerKind::XiaomiPcManager);
     }
@@ -880,6 +883,7 @@ mod tests {
         let expected = [
             "AAA_XiaomiPCManager_stable_5.8.0.75.exe",
             "NeR5_XiaomiPCManager_feature_p52_5.8.0.74_9900fa23.exe",
+            "XiaomiPCManager_dev_6.0.0.39.exe",
         ];
         for name in expected {
             fs::write(dir.join(name), b"fixture").unwrap();
@@ -938,8 +942,25 @@ mod tests {
             classify_installer_filename("AAA_XiaomiPCManager_stable_5.8.0.75.exe"),
             Some(InstallerKind::XiaomiPcManager)
         );
-        // 非安装包命名不应被识别。
-        assert_eq!(classify_installer_filename("XiaomiPCManager.exe"), None);
+        for name in [
+            "XiaomiPCManager_dev_6.0.0.39.exe",
+            "XiaomiPCManager_stable_6.0.0.40.exe",
+            "xiaomipcmanager_dev_6.0.0.39.EXE",
+        ] {
+            assert_eq!(
+                classify_installer_filename(name),
+                Some(InstallerKind::XiaomiPcManager)
+            );
+        }
+        // 主程序、空后缀、近似产品名和非 exe 文件仍不应识别为安装包。
+        for name in [
+            "XiaomiPCManager.exe",
+            "XiaomiPCManager_.exe",
+            "NotXiaomiPCManager_dev_6.0.0.39.exe",
+            "XiaomiPCManager_dev_6.0.0.39.txt",
+        ] {
+            assert_eq!(classify_installer_filename(name), None);
+        }
         assert_eq!(
             classify_installer_filename("小米互联最新版本_1.1.2.36.txt"),
             None

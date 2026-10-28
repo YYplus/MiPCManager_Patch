@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       gui_preview:
-        description: Upload the GUI preview executable
+        description: Upload GUI and CLI preview executables
         type: boolean
         default: false
 
@@ -49,20 +49,25 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Build release GUI
-        run: cargo build --release --bin MiPCM_GUI
+      - name: Build release GUI and CLI
+        run: cargo build --release --bin MiPCM_GUI --bin MiPCM_CLI
 
-      - name: Stage preview executable
-        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
+      - name: Stage preview executables
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.gui_preview) ||
+          (github.event_name == 'push' && contains(github.event.head_commit.message, '[gui-preview]'))
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target\release\MiPCM_GUI.exe dist\MiPCM_Patch_UI_Preview.exe
+          Copy-Item target\release\MiPCM_CLI.exe dist\MiPCM_Patch_CLI_Preview.exe
 
-      - name: Upload GUI preview
-        if: github.event_name == 'workflow_dispatch' && inputs.gui_preview
+      - name: Upload preview executables
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.gui_preview) ||
+          (github.event_name == 'push' && contains(github.event.head_commit.message, '[gui-preview]'))
         uses: actions/upload-artifact@v4
         with:
           name: MiPCM-Patch-Unified-Preview
-          path: dist/MiPCM_Patch_UI_Preview.exe
+          path: dist/*.exe
           retention-days: 3
