@@ -115,65 +115,6 @@ fn parse_version(s: &str) -> Option<Vec<u64>> {
     if parts.is_empty() { None } else { Some(parts) }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{find_product_root, is_valid_product_root, latest_version_dir};
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn make_temp_dir(tag: &str) -> PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time before unix epoch")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "mipcm-install-detect-{tag}-{}-{stamp}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        dir
-    }
-
-    #[test]
-    fn empty_product_directory_is_invalid() {
-        let root = make_temp_dir("empty");
-        assert!(!is_valid_product_root(&root));
-        let root_str = root.to_string_lossy().to_string();
-        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
-        fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn residue_without_numeric_version_directory_is_invalid() {
-        let root = make_temp_dir("residue");
-        fs::create_dir_all(root.join("cache")).expect("create cache dir");
-        fs::create_dir_all(root.join("logs")).expect("create logs dir");
-        fs::create_dir_all(root.join("v5.8.0")).expect("create non-version dir");
-        assert!(!is_valid_product_root(&root));
-        let root_str = root.to_string_lossy().to_string();
-        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
-        fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn root_with_numeric_version_directory_is_valid() {
-        let root = make_temp_dir("valid");
-        let old = root.join("1.9.0.0");
-        let latest = root.join("2.0.0.1");
-        fs::create_dir_all(&old).expect("create old version dir");
-        fs::create_dir_all(&latest).expect("create latest version dir");
-        assert!(is_valid_product_root(&root));
-        let root_str = root.to_string_lossy().to_string();
-        assert_eq!(
-            find_product_root(&root_str, "XiaomiPCManager"),
-            Some(root.clone())
-        );
-        assert_eq!(latest_version_dir(&root).expect("latest version"), latest);
-        fs::remove_dir_all(root).ok();
-    }
-}
-
 /// 关闭小米电脑管家相关进程。
 ///
 /// 优先关闭安装目录内运行的进程，再用已知进程名兜底，避免版本更新新增子进程后漏关。
@@ -351,4 +292,63 @@ pub fn write_file_atomic(file: &Path, data: &[u8]) -> Result<()> {
     }
     fs::rename(&tmp, file).with_context(|| format!("替换文件失败 {}", file.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_product_root, is_valid_product_root, latest_version_dir};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(tag: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "mipcm-install-detect-{tag}-{}-{stamp}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn empty_product_directory_is_invalid() {
+        let root = make_temp_dir("empty");
+        assert!(!is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn residue_without_numeric_version_directory_is_invalid() {
+        let root = make_temp_dir("residue");
+        fs::create_dir_all(root.join("cache")).expect("create cache dir");
+        fs::create_dir_all(root.join("logs")).expect("create logs dir");
+        fs::create_dir_all(root.join("v5.8.0")).expect("create non-version dir");
+        assert!(!is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert!(find_product_root(&root_str, "XiaomiPCManager").is_none());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn root_with_numeric_version_directory_is_valid() {
+        let root = make_temp_dir("valid");
+        let old = root.join("1.9.0.0");
+        let latest = root.join("2.0.0.1");
+        fs::create_dir_all(&old).expect("create old version dir");
+        fs::create_dir_all(&latest).expect("create latest version dir");
+        assert!(is_valid_product_root(&root));
+        let root_str = root.to_string_lossy().to_string();
+        assert_eq!(
+            find_product_root(&root_str, "XiaomiPCManager"),
+            Some(root.clone())
+        );
+        assert_eq!(latest_version_dir(&root).expect("latest version"), latest);
+        fs::remove_dir_all(root).ok();
+    }
 }
