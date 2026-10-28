@@ -218,7 +218,8 @@ fn push_full_installation_status(root: &Path, out: &mut Vec<String>) {
     match install::latest_version_dir(root) {
         Ok(version) => {
             out.push(format!("最新版本目录：{}", version.display()));
-            push_file_status(&version.join(locale::TARGET_DLL), out);
+            let runtime_dir = install::runtime_native_dir(&version);
+            push_file_status(&runtime_dir.join(locale::TARGET_DLL), out);
             push_file_status(&version.join(camera::TARGET_DLL), out);
             out.push("  -- 音频流转广播模式 --".to_string());
             for (file, state) in audio::current_state(&version) {
@@ -236,7 +237,7 @@ fn push_full_installation_status(root: &Path, out: &mut Vec<String>) {
                 model.unwrap_or_else(|| "未设置".to_string())
             ));
             out.push("  -- [实验性] Lyra 特殊适配 --".to_string());
-            let smbios_dll = version.join(smbios_spoof::TARGET_DLL);
+            let smbios_dll = runtime_dir.join(smbios_spoof::TARGET_DLL);
             let smbios_ok = smbios_dll.exists() && smbios_spoof::is_patched(&smbios_dll);
             out.push(format!(
                 "     SMBIOS 设备身份: {}",
@@ -1033,9 +1034,9 @@ pub fn resolve_locale_dll_from_roots(
     for root in [manager_root, continuity_root].into_iter().flatten() {
         match install::latest_version_dir(root) {
             Ok(version) => {
-                // HyperConnect 2.0 的 DLL 位于 resources\native-interconnect\win32 子目录。
+                // 按当前版本的已知布局定位，不回退到旧版本或其他 SDK DLL。
                 let dll = install::runtime_native_dir(&version).join(locale::TARGET_DLL);
-                if dll.exists() {
+                if dll.is_file() {
                     return Ok(dll);
                 }
                 errors.push(format!(
@@ -1064,8 +1065,17 @@ pub fn resolve_full_feature_dll(explicit: Option<PathBuf>, filename: &str) -> Re
         return Ok(path);
     }
     let version = resolve_full_version_dir()?;
-    let path = version.join(filename);
-    if !path.exists() {
+    resolve_full_feature_dll_from_version(&version, filename)
+}
+
+fn resolve_full_feature_dll_from_version(version: &Path, filename: &str) -> Result<PathBuf> {
+    let dir = if filename.eq_ignore_ascii_case(locale::TARGET_DLL) {
+        install::runtime_native_dir(version)
+    } else {
+        version.to_path_buf()
+    };
+    let path = dir.join(filename);
+    if !path.is_file() {
         bail!("在 {} 中未找到 {filename}", version.display());
     }
     Ok(path)
@@ -1227,6 +1237,62 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn locale_and_smbios_resolve_the_same_smartshare_runtime() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join("5.8.1.130");
+        let version = root.path().join("6.0.0.39");
+        let smartshare = version.join("MiSmartShare");
+        fs::create_dir_all(&old).unwrap();
+        fs::create_dir_all(&smartshare).unwrap();
+        let old_dll = old.join(locale::TARGET_DLL);
+        fs::write(&old_dll, b"old runtime").unwrap();
+        let sdk = smartshare.join("micontinuity_sdk.dll");
+        fs::write(&sdk, b"sdk").unwrap();
+        let dll = smartshare.join(locale::TARGET_DLL);
+        let original: Vec<u8> = "Geo\0Name\0"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        fs::write(&dll, &original).unwrap();
+
+        let locale_dll = resolve_locale_dll_from_roots(Some(root.path()), None).unwrap();
+        let smbios_dll =
+            resolve_full_feature_dll_from_version(&version, smbios_spoof::TARGET_DLL).unwrap();
+        assert_eq!(locale_dll, dll);
+        assert_eq!(smbios_dll, dll);
+        locale::apply(&locale_dll, "CN", false).unwrap();
+        assert!(locale::is_patched(&locale_dll));
+        locale::revert(&locale_dll, false).unwrap();
+        assert!(!locale::is_patched(&locale_dll));
+        assert_eq!(fs::read(&dll).unwrap(), original);
+        assert_eq!(fs::read(old_dll).unwrap(), b"old runtime");
+        assert_eq!(fs::read(sdk).unwrap(), b"sdk");
+
+        let camera_dll = version.join(camera::TARGET_DLL);
+        fs::write(&camera_dll, b"camera").unwrap();
+        assert_eq!(
+            resolve_full_feature_dll_from_version(&version, camera::TARGET_DLL).unwrap(),
+            camera_dll
+        );
+    }
+
+    #[test]
+    fn locale_resolution_does_not_fall_back_to_an_older_version_or_sdk() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join("5.8.1.130");
+        let latest = root.path().join("6.0.0.39/MiSmartShare");
+        fs::create_dir_all(&old).unwrap();
+        fs::create_dir_all(&latest).unwrap();
+        fs::write(old.join(locale::TARGET_DLL), b"old runtime").unwrap();
+        fs::write(latest.join("micontinuity_sdk.dll"), b"sdk").unwrap();
+        let error = resolve_locale_dll_from_roots(Some(root.path()), None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("6.0.0.39"));
+        assert!(error.contains("未找到"));
     }
 
     #[test]

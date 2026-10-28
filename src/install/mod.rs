@@ -41,18 +41,19 @@ pub fn find_xiaoai_root() -> Option<PathBuf> {
 /// 版本目录下的原生互联运行目录（目标 DLL 所在目录）。
 ///
 /// - 新版 HyperConnect 2.0：`<版本目录>\resources\native-interconnect\win32`
+/// - XiaomiPCManager 6.0：`<版本目录>\MiSmartShare`
 /// - 旧版 PcContinuity / XiaomiPCManager：版本目录自身
+/// 仅在子目录中存在目标 DLL 时选择它，避免空目录或其他 SDK 干扰定位。
 pub fn runtime_native_dir(version_dir: &Path) -> PathBuf {
     let nested = HYPERCONNECT_NATIVE_REL
         .split('\\')
         .fold(version_dir.to_path_buf(), |path, component| {
             path.join(component)
         });
-    if nested.is_dir() {
-        nested
-    } else {
-        version_dir.to_path_buf()
-    }
+    [version_dir.join("MiSmartShare"), nested]
+        .into_iter()
+        .find(|dir| dir.join("micont_rtm.dll").is_file())
+        .unwrap_or_else(|| version_dir.to_path_buf())
 }
 
 fn find_product_root(default_root: &str, product_dir: &str) -> Option<PathBuf> {
@@ -296,7 +297,7 @@ pub fn write_file_atomic(file: &Path, data: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_product_root, is_valid_product_root, latest_version_dir};
+    use super::{find_product_root, is_valid_product_root, latest_version_dir, runtime_native_dir};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -312,6 +313,33 @@ mod tests {
         ));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
+    }
+
+    #[test]
+    fn runtime_native_dir_supports_known_product_layouts() {
+        for relative in ["", "MiSmartShare", "resources/native-interconnect/win32"] {
+            let root = tempfile::tempdir().unwrap();
+            let runtime = root.path().join(relative);
+            fs::create_dir_all(&runtime).unwrap();
+            fs::write(runtime.join("micont_rtm.dll"), b"runtime").unwrap();
+            assert_eq!(runtime_native_dir(root.path()), runtime);
+        }
+    }
+
+    #[test]
+    fn runtime_native_dir_requires_the_target_dll_and_prefers_smartshare() {
+        let root = tempfile::tempdir().unwrap();
+        let smartshare = root.path().join("MiSmartShare");
+        let nested = root.path().join("resources/native-interconnect/win32");
+        fs::create_dir_all(&smartshare).unwrap();
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(smartshare.join("micontinuity_sdk.dll"), b"sdk").unwrap();
+        fs::write(root.path().join("micont_rtm.dll"), b"root").unwrap();
+        assert_eq!(runtime_native_dir(root.path()), root.path());
+        fs::write(nested.join("micont_rtm.dll"), b"hyperconnect").unwrap();
+        assert_eq!(runtime_native_dir(root.path()), nested);
+        fs::write(smartshare.join("micont_rtm.dll"), b"smartshare").unwrap();
+        assert_eq!(runtime_native_dir(root.path()), smartshare);
     }
 
     #[test]

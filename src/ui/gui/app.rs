@@ -145,7 +145,8 @@ impl PatchState {
                     Ok(true) => 2,
                     Err(_) => 3,
                 };
-            state.smbios = smbios_spoof::is_patched(&version.join(smbios_spoof::TARGET_DLL));
+            let runtime_dir = install::runtime_native_dir(&version);
+            state.smbios = smbios_spoof::is_patched(&runtime_dir.join(smbios_spoof::TARGET_DLL));
         }
         state.xiaoai_patch = install::find_xiaoai_root()
             .and_then(|root| install::latest_version_dir(&root).ok())
